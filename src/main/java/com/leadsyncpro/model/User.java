@@ -5,16 +5,16 @@ import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
 import org.hibernate.annotations.GenericGenerator;
 
-import jakarta.persistence.Entity; // Changed from javax.persistence
-import jakarta.persistence.Table; // Changed from javax.persistence
-import jakarta.persistence.Id; // Changed from javax.persistence
-import jakarta.persistence.GeneratedValue; // Changed from javax.persistence
-import jakarta.persistence.Column; // Changed from javax.persistence
-import jakarta.persistence.UniqueConstraint; // Changed from javax.persistence
-import jakarta.persistence.Enumerated; // Changed from javax.persistence
-import jakarta.persistence.EnumType; // Changed from javax.persistence
-import jakarta.persistence.PrePersist; // Changed from javax.persistence
-import jakarta.persistence.PreUpdate; // Changed from javax.persistence
+import jakarta.persistence.Entity;
+import jakarta.persistence.Table;
+import jakarta.persistence.Id;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.Column;
+import jakarta.persistence.UniqueConstraint;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
 import java.time.Instant;
 import java.util.UUID;
 
