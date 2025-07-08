@@ -1,11 +1,15 @@
+// build.gradle (Gradle Groovy DSL)
+// Bu dosya, Spring Initializr'dan Java 21 ve Gradle seçerek oluşturduğunuzda temel olarak bu şekilde olacaktır.
+// JWT bağımlılıklarını ve Lombok'u manuel olarak ekledik.
+
 plugins {
 	id 'java'
-	id 'org.springframework.boot' version '3.5.3'
-	id 'io.spring.dependency-management' version '1.1.7'
+	id 'org.springframework.boot' version '3.5.3' // Spring Boot versiyonu
+	id 'io.spring.dependency-management' version '1.1.7' // Bağımlılık yönetimi
 }
 
-group = 'com.leadsyncpro'
-version = '0.0.1-SNAPSHOT'
+group = 'com.leadsyncpro' // Projenizin grup kimliği
+version = '0.0.1-SNAPSHOT' // Projenizin versiyonu
 
 java {
 	toolchain {
@@ -20,18 +24,34 @@ configurations {
 }
 
 repositories {
-	mavenCentral()
+	mavenCentral() // Bağımlılıkları Maven Central'dan çekeceğiz
 }
 
 dependencies {
-	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
-	implementation 'org.springframework.boot:spring-boot-starter-oauth2-client'
-	implementation 'org.springframework.boot:spring-boot-starter-security'
-	implementation 'org.springframework.boot:spring-boot-starter-web'
+	// Spring Boot Starter'lar
+	implementation 'org.springframework.boot:spring-boot-starter-web' // REST API'ler için
+	implementation 'org.springframework.boot:spring-boot-starter-data-jpa' // JPA ve Hibernate için
+	implementation 'org.springframework.boot:spring-boot-starter-security' // Spring Security için
+	implementation 'org.springframework.boot:spring-boot-starter-validation' // İstek doğrulama için
+	implementation 'org.springframework.boot:spring-boot-starter-oauth2-client' // OAuth2 Client (Google/Facebook entegrasyonu için)
+
+	// Veritabanı Sürücüsü
+	runtimeOnly 'org.postgresql:postgresql' // PostgreSQL JDBC sürücüsü
+
+	// JWT Kütüphaneleri (Manuel olarak eklenmeli)
+	// Spring Boot 3.x ve Jakarta uyumluluğu için bu versiyonlar önerilir.
+	implementation 'io.jsonwebtoken:jjwt-api:0.11.5'
+	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.11.5'
+	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.11.5'
+
+	// Lombok (İsteğe bağlı, geliştirme kolaylığı sağlar)
 	compileOnly 'org.projectlombok:lombok'
-	developmentOnly 'org.springframework.boot:spring-boot-devtools'
-	runtimeOnly 'org.postgresql:postgresql'
 	annotationProcessor 'org.projectlombok:lombok'
+
+	// Geliştirme Araçları (İsteğe bağlı, sıcak yeniden yükleme vb.)
+	developmentOnly 'org.springframework.boot:spring-boot-devtools'
+
+	// Test Bağımlılıkları
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testImplementation 'org.springframework.security:spring-security-test'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'

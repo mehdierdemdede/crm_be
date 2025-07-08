@@ -33,7 +33,7 @@ public class User {
     private UUID id;
 
     @Column(name = "organization_id", nullable = false)
-    private UUID organizationId;
+    private UUID organizationId; // Discriminator column
 
     @Column(nullable = false)
     private String email;
@@ -47,9 +47,9 @@ public class User {
     @Column(name = "last_name")
     private String lastName;
 
-    @Enumerated(EnumType.STRING)
+    @Enumerated(EnumType.STRING) // Store enum as string in DB
     @Column(nullable = false)
-    private Role role;
+    private Role role; // Enum for roles: SUPER_ADMIN, ADMIN, USER
 
     @Column(name = "is_active")
     private boolean isActive = true;
