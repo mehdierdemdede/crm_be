@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.crypto.password.PasswordEncoder; // PasswordEncoder'ı enjekte etmek için eklendi
 
 import jakarta.validation.Valid;
 import java.util.UUID;
@@ -27,13 +28,16 @@ public class AuthController {
     private final AuthenticationManager authenticationManager;
     private final JwtTokenProvider tokenProvider;
     private final UserService userService;
+    private final PasswordEncoder passwordEncoder; // PasswordEncoder enjekte edildi
 
     public AuthController(AuthenticationManager authenticationManager,
                           JwtTokenProvider tokenProvider,
-                          UserService userService) {
+                          UserService userService,
+                          PasswordEncoder passwordEncoder) { // Constructor güncellendi
         this.authenticationManager = authenticationManager;
         this.tokenProvider = tokenProvider;
         this.userService = userService;
+        this.passwordEncoder = passwordEncoder; // Enjekte edilen PasswordEncoder atandı
     }
 
     @PostMapping("/login")
@@ -83,6 +87,12 @@ public class AuthController {
         // Generate JWT token
         String jwt = tokenProvider.generateToken(authentication);
         return ResponseEntity.ok(new JwtAuthenticationResponse(jwt, "Bearer"));
+    }
 
+    // YENİ EKLENEN ENDPOINT: Password Hash Bilgisini Almak İçin
+    @PostMapping("/hash-password")
+    public ResponseEntity<String> hashPassword(@RequestBody String plainPassword) {
+        String hashedPassword = passwordEncoder.encode(plainPassword);
+        return ResponseEntity.ok(hashedPassword);
     }
 }
