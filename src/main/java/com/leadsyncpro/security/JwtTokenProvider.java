@@ -1,11 +1,12 @@
+// src/main/java/com/leadsyncpro/security/JwtTokenProvider.java
 package com.leadsyncpro.security;
 
-import io.jsonwebtoken.Claims; // Added for Claims
+import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
-import io.jsonwebtoken.MalformedJwtException; // Added for exceptions
-import io.jsonwebtoken.ExpiredJwtException; // Added for exceptions
-import io.jsonwebtoken.UnsupportedJwtException; // Added for exceptions
+import io.jsonwebtoken.MalformedJwtException;
+import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.UnsupportedJwtException;
 import io.jsonwebtoken.security.Keys;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

@@ -6,6 +6,8 @@ import com.leadsyncpro.model.User;
 import com.leadsyncpro.model.Role;
 import com.leadsyncpro.security.JwtTokenProvider;
 import com.leadsyncpro.service.UserService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -16,7 +18,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.security.crypto.password.PasswordEncoder; // PasswordEncoder'ı enjekte etmek için eklendi
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import jakarta.validation.Valid;
 import java.util.UUID;
@@ -25,74 +27,74 @@ import java.util.UUID;
 @RequestMapping("/api/auth")
 public class AuthController {
 
+    private static final Logger logger = LoggerFactory.getLogger(AuthController.class);
+
     private final AuthenticationManager authenticationManager;
     private final JwtTokenProvider tokenProvider;
     private final UserService userService;
-    private final PasswordEncoder passwordEncoder; // PasswordEncoder enjekte edildi
+    private final PasswordEncoder passwordEncoder;
 
     public AuthController(AuthenticationManager authenticationManager,
                           JwtTokenProvider tokenProvider,
                           UserService userService,
-                          PasswordEncoder passwordEncoder) { // Constructor güncellendi
+                          PasswordEncoder passwordEncoder) {
         this.authenticationManager = authenticationManager;
         this.tokenProvider = tokenProvider;
         this.userService = userService;
-        this.passwordEncoder = passwordEncoder; // Enjekte edilen PasswordEncoder atandı
+        this.passwordEncoder = passwordEncoder;
     }
 
     @PostMapping("/login")
     public ResponseEntity<?> authenticateUser(@Valid @RequestBody LoginRequest loginRequest) {
+        logger.info("Login attempt for email: {} in organization: {}", loginRequest.getEmail(), loginRequest.getOrganizationId());
 
-        // For SuperAdmin, organizationId will be "super" or a specific ID for global access
-        // For regular users, organizationId is crucial for multi-tenancy
         UUID organizationId = null;
         if (!"super".equalsIgnoreCase(loginRequest.getOrganizationId())) {
             try {
                 organizationId = UUID.fromString(loginRequest.getOrganizationId());
             } catch (IllegalArgumentException e) {
+                logger.warn("Invalid Organization ID format: {}", loginRequest.getOrganizationId());
                 return ResponseEntity.badRequest().body("Invalid Organization ID format.");
             }
         }
 
-        // Find the user by email and organizationId
         User user = null;
         if (organizationId != null) {
             user = userService.findByEmailAndOrganizationId(loginRequest.getEmail(), organizationId)
                     .orElse(null);
-        } else { // Handle SuperAdmin login where orgId might be a special string like "super"
+        } else {
             user = userService.findByEmail(loginRequest.getEmail())
-                    .filter(u -> u.getRole() == Role.SUPER_ADMIN) // Ensure it's a SuperAdmin
+                    .filter(u -> u.getRole() == Role.SUPER_ADMIN)
                     .orElse(null);
-            // If it's a SuperAdmin, set their organizationId to null or a specific value
             if (user != null && user.getRole() == Role.SUPER_ADMIN) {
-                organizationId = null; // Or a specific UUID for global SuperAdmin context
+                organizationId = null;
             }
         }
 
         if (user == null) {
+            logger.warn("User not found or role mismatch for email: {} in organization: {}", loginRequest.getEmail(), loginRequest.getOrganizationId());
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid credentials or organization ID.");
         }
 
-        // Authenticate using Spring Security's AuthenticationManager
+        logger.debug("User found: {} (Role: {}) for authentication. Attempting authentication...", user.getEmail(), user.getRole());
         Authentication authentication = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(
-                        loginRequest.getEmail(), // Spring Security uses this as 'username'
+                        loginRequest.getEmail(),
                         loginRequest.getPassword()
                 )
         );
 
-        // Set authentication in SecurityContext
         SecurityContextHolder.getContext().setAuthentication(authentication);
+        logger.info("User {} successfully authenticated.", loginRequest.getEmail());
 
-        // Generate JWT token
         String jwt = tokenProvider.generateToken(authentication);
         return ResponseEntity.ok(new JwtAuthenticationResponse(jwt, "Bearer"));
     }
 
-    // YENİ EKLENEN ENDPOINT: Password Hash Bilgisini Almak İçin
     @PostMapping("/hash-password")
     public ResponseEntity<String> hashPassword(@RequestBody String plainPassword) {
         String hashedPassword = passwordEncoder.encode(plainPassword);
+        logger.info("Hashed password generated for plain text: '{}'", plainPassword);
         return ResponseEntity.ok(hashedPassword);
     }
 }

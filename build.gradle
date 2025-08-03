@@ -51,6 +51,12 @@ dependencies {
 	// Geliştirme Araçları (İsteğe bağlı, sıcak yeniden yükleme vb.)
 	developmentOnly 'org.springframework.boot:spring-boot-devtools'
 
+	// Facebook Graph API Client Library (RestFB) - TEKRAR EKLENDİ
+	implementation 'com.restfb:restfb:2023.9.0' // Veya en son versiyon
+
+	// Google Ads API Client Library (Eğer kullanacaksanız)
+	implementation 'com.google.api-ads:google-ads:23.0.0' // Veya en son versiyon
+
 	// Test Bağımlılıkları
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testImplementation 'org.springframework.security:spring-security-test'
