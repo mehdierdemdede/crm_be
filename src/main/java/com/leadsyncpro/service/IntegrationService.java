@@ -1,61 +1,34 @@
 // src/main/java/com/leadsyncpro/service/IntegrationService.java
 package com.leadsyncpro.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leadsyncpro.exception.ResourceNotFoundException;
 import com.leadsyncpro.model.IntegrationConfig;
 import com.leadsyncpro.model.IntegrationPlatform;
-import com.leadsyncpro.model.Lead; // Kendi Lead sınıfımız
+import com.leadsyncpro.model.Lead;
 import com.leadsyncpro.model.LeadStatus;
+import com.leadsyncpro.repository.CampaignRepository;
 import com.leadsyncpro.repository.IntegrationConfigRepository;
 import com.leadsyncpro.repository.LeadRepository;
-import com.leadsyncpro.repository.CampaignRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.ResponseEntity;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.client.RestTemplate;
+import org.springframework.http.*;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.oauth2.client.registration.ClientRegistration;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
-import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationResponse;
-import org.springframework.security.oauth2.core.endpoint.OAuth2AccessTokenResponse;
-import org.springframework.security.oauth2.core.OAuth2AccessToken;
-import org.springframework.security.oauth2.core.OAuth2RefreshToken;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.MediaType;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.Collections;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
-
-import org.springframework.scheduling.annotation.Scheduled;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-// RestFB importları
-import com.restfb.DefaultFacebookClient;
-import com.restfb.FacebookClient;
-import com.restfb.Version;
-import com.restfb.types.ads.LeadgenForm;
-import com.restfb.Connection;
-import com.restfb.types.Page;
-import com.restfb.Parameter;
-
-
-
-// Jackson for JSON parsing (RestTemplate ile Map dönüşümü için gerekli)
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.core.type.TypeReference;
 
 
 @Service
@@ -136,30 +109,33 @@ public class IntegrationService {
             throw new IllegalArgumentException("Geçersiz istemci kayıt ID'si: " + registrationId);
         }
 
-        // organizationId ve userId'yi güvenli bir şekilde aktarmak için state parametresi kullan
-        String state = organizationId.toString() + "|" + userId.toString();
+        String state = organizationId + "|" + userId;
 
-        // redirectUri'deki {baseUrl} placeholder'ını manuel olarak değiştir
         String redirectUri = clientRegistration.getRedirectUri();
         if (redirectUri.contains("{baseUrl}")) {
             redirectUri = redirectUri.replace("{baseUrl}", "http://localhost:8080");
         }
 
-        // Scope'ları virgülle ayrılmış String'e dönüştür ve küçük harfe çevir
-        String scopes = clientRegistration.getScopes().stream()
-                .map(String::toLowerCase)
-                .collect(Collectors.joining(","));
+        // Facebook için sadece sayfa lead’leri için gereken izinler
+        List<String> scopes = Arrays.asList(
+                "email",
+                "public_profile",
+                "pages_show_list",
+                "pages_read_engagement",
+                "leads_retrieval"
+        );
 
+        String scopeParam = String.join(",", scopes);
+        String authorizationUri = clientRegistration.getProviderDetails().getAuthorizationUri();
 
-        OAuth2AuthorizationRequest authorizationRequest = OAuth2AuthorizationRequest.authorizationCode()
-                .authorizationUri(clientRegistration.getProviderDetails().getAuthorizationUri())
-                .clientId(clientRegistration.getClientId())
-                .redirectUri(redirectUri)
-                .scope(scopes)
-                .state(state)
-                .build();
-
-        return authorizationRequest.getAuthorizationRequestUri();
+        return UriComponentsBuilder.fromHttpUrl(authorizationUri)
+                .queryParam("client_id", clientRegistration.getClientId())
+                .queryParam("redirect_uri", redirectUri)
+                .queryParam("response_type", "code")
+                .queryParam("state", state)
+                .queryParam("scope", scopeParam)
+                .build()
+                .toUriString();
     }
 
     /**
@@ -174,7 +150,6 @@ public class IntegrationService {
             throw new IllegalArgumentException("Geçersiz istemci kayıt ID'si: " + registrationId);
         }
 
-        // State'ten organizationId ve userId'yi çıkar
         String[] stateParts = state.split("\\|");
         if (stateParts.length != 2) {
             logger.error("OAuth2 Callback Hatası: Geçersiz state parametre formatı: {}", state);
@@ -183,9 +158,6 @@ public class IntegrationService {
         UUID organizationId = UUID.fromString(stateParts[0]);
         UUID userId = UUID.fromString(stateParts[1]);
 
-        logger.info("Platform: {} için organizasyon: {} için OAuth2 Callback alındı", registrationId, organizationId);
-
-        // Yetkilendirme kodunu token'larla değiştirmek için istek hazırla
         MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
         params.add("grant_type", "authorization_code");
         params.add("client_id", clientRegistration.getClientId());
@@ -209,38 +181,25 @@ public class IntegrationService {
         );
 
         Map<String, Object> tokenResponse = response.getBody();
-        if (tokenResponse == null) {
-            logger.error("OAuth2 Callback Hatası: {} platformu için token yanıt gövdesi boş.", registrationId);
-            throw new RuntimeException("Erişim token'ı alınamadı: Boş yanıt.");
-        }
-        if (!tokenResponse.containsKey("access_token")) {
-            logger.error("OAuth2 Callback Hatası: {} platformu için yanıtta erişim token'ı bulunamadı. Yanıt: {}", registrationId, tokenResponse);
-            throw new RuntimeException("Erişim token'ı alınamadı: Yanıtta access_token yok.");
+        if (tokenResponse == null || !tokenResponse.containsKey("access_token")) {
+            throw new RuntimeException("Erişim token'ı alınamadı.");
         }
 
         String accessToken = (String) tokenResponse.get("access_token");
         String refreshToken = (String) tokenResponse.get("refresh_token");
 
-        // expires_in'i daha güvenli bir şekilde al
         Long expiresInSeconds = null;
         Object expiresInObj = tokenResponse.get("expires_in");
         if (expiresInObj instanceof Number) {
             expiresInSeconds = ((Number) expiresInObj).longValue();
         } else if (expiresInObj instanceof String) {
-            try {
-                expiresInSeconds = Long.parseLong((String) expiresInObj);
-            } catch (NumberFormatException e) {
-                logger.warn("OAuth2 Callback Uyarısı: '{}' platformu için 'expires_in' string ama geçerli bir sayı değil: {}", registrationId, expiresInObj);
-            }
-        } else {
-            logger.warn("OAuth2 Callback Uyarısı: '{}' platformu için 'expires_in' beklenmeyen tipte: {}", registrationId, expiresInObj != null ? expiresInObj.getClass().getName() : "null");
+            try { expiresInSeconds = Long.parseLong((String) expiresInObj); } catch (NumberFormatException ignored) {}
         }
-
         Instant expiresAt = (expiresInSeconds != null) ? Instant.now().plus(expiresInSeconds, ChronoUnit.SECONDS) : null;
         String scope = (String) tokenResponse.get("scope");
 
-        // Entegrasyon yapılandırmasını al veya oluştur
-        IntegrationConfig config = integrationConfigRepository.findByOrganizationIdAndPlatform(organizationId, IntegrationPlatform.valueOf(registrationId.toUpperCase()))
+        IntegrationConfig config = integrationConfigRepository.findByOrganizationIdAndPlatform(
+                        organizationId, IntegrationPlatform.valueOf(registrationId.toUpperCase()))
                 .orElse(new IntegrationConfig());
 
         config.setOrganizationId(organizationId);
@@ -253,58 +212,59 @@ public class IntegrationService {
         config.setClientSecret(encryptionService.encrypt(clientRegistration.getClientSecret()));
         config.setCreatedBy(userId);
 
-        // Facebook için sayfa ID'sini çek ve kaydet
+        // FACEBOOK: lead formu olan sayfayı bul
         if (registrationId.equalsIgnoreCase("facebook")) {
             try {
-                // DÜZELTİLEN KISIM: RestFB yerine doğrudan RestTemplate ile me/accounts çağrısı
-                // 'perms' alanı doğrudan sorgulanmadığı için hata vermeyecek.
-                String pagesApiUrl = "https://graph.facebook.com/v18.0/me/accounts?access_token=" + accessToken + "&fields=id,name,access_token"; // 'perms' alanı kaldırıldı, access_token eklendi
+                String pagesApiUrl = "https://graph.facebook.com/v18.0/me/accounts"
+                        + "?fields=id,name,access_token&access_token=" + accessToken;
+
                 ResponseEntity<Map> pagesResponse = restTemplate.exchange(pagesApiUrl, HttpMethod.GET, null, Map.class);
                 List<Map<String, Object>> pagesData = (List<Map<String, Object>>) pagesResponse.getBody().get("data");
 
                 String selectedPageId = null;
                 if (pagesData != null) {
                     for (Map<String, Object> pageMap : pagesData) {
+                        String pageId = (String) pageMap.get("id");
                         String pageAccessToken = (String) pageMap.get("access_token");
-                        if (pageAccessToken != null) {
-                            // Debug token endpoint'ini kullanarak sayfa token'ının izinlerini kontrol et
-                            String debugTokenUrl = "https://graph.facebook.com/debug_token?input_token=" + pageAccessToken + "&access_token=" + accessToken; // Kullanıcının ana access_token'ı debug_token için gerekli
-                            ResponseEntity<Map> debugResponse = restTemplate.exchange(debugTokenUrl, HttpMethod.GET, null, Map.class);
-                            Map<String, Object> debugData = (Map<String, Object>) debugResponse.getBody().get("data");
+                        if (pageId == null || pageAccessToken == null) continue;
 
-                            if (debugData != null && debugData.containsKey("scopes")) {
-                                List<String> scopes = (List<String>) debugData.get("scopes");
-                                if (scopes != null && scopes.contains("manage_leads")) { // Facebook API'de 'manage_leads' küçük harf
-                                    selectedPageId = (String) pageMap.get("id");
-                                    logger.info("MANAGE_LEADS iznine sahip Facebook sayfası bulundu: {} ({})", pageMap.get("name"), pageMap.get("id"));
-                                    break;
-                                }
+                        // Bu sayfanın en az bir lead formu var mı?
+                        String testFormsUrl = "https://graph.facebook.com/v18.0/" + pageId
+                                + "/leadgen_forms?limit=1&access_token=" + pageAccessToken;
+
+                        try {
+                            ResponseEntity<Map> formsResp = restTemplate.exchange(testFormsUrl, HttpMethod.GET, null, Map.class);
+                            List<Map<String, Object>> fdata = (List<Map<String, Object>>) formsResp.getBody().get("data");
+                            if (fdata != null && !fdata.isEmpty()) {
+                                selectedPageId = pageId;
+                                logger.info("Lead formu olan Facebook sayfası bulundu: {} ({})", pageMap.get("name"), pageId);
+                                break;
                             }
+                        } catch (Exception inner) {
+                            logger.debug("Sayfa {} form kontrolünde hata/erişim yok: {}", pageId, inner.getMessage());
                         }
                     }
                 }
+
                 if (selectedPageId != null) {
                     config.setPlatformPageId(selectedPageId);
-                    logger.info("Organizasyon {} için Facebook Sayfa ID'si kaydedildi: {}", organizationId, selectedPageId);
                 } else {
-                    logger.warn("Organizasyon {} için MANAGE_LEADS iznine sahip Facebook sayfası bulunamadı. Lead'ler çekilemiyor.", organizationId);
+                    logger.warn("Organizasyon {} için lead formu olan bir Facebook sayfası bulunamadı.", organizationId);
                 }
-
             } catch (Exception e) {
-                logger.error("Organizasyon {} için Facebook sayfaları çekilirken hata oluştu: {}", organizationId, e.getMessage());
+                logger.error("Facebook sayfaları çekilirken hata: {}", e.getMessage());
             }
         }
-        // Google için de benzer şekilde müşteri ID'si çekilebilir (Google Ads API'ye özgü)
 
         integrationConfigRepository.save(config);
-
-        logger.info("OAuth2 entegrasyonu organizasyon {} için platform {} ile başarılı oldu.", organizationId, registrationId);
+        logger.info("OAuth2 entegrasyonu organizasyon {} için platform {} ile başarıyla tamamlandı.", organizationId, registrationId);
     }
 
     /**
      * Süresi dolmuş token'ları yenilemek ve aktif entegrasyonlara sahip tüm organizasyonlar için lead'leri çekmek için zamanlanmış görev.
      * Bu basit bir örnektir; gerçek bir uygulamada bunu daha sağlam bir şekilde yönetirsiniz (örn. organizasyon başına zamanlama).
      */
+
     @Transactional
     public String refreshAccessToken(UUID organizationId, IntegrationPlatform platform) {
         IntegrationConfig config = integrationConfigRepository.findByOrganizationIdAndPlatform(organizationId, platform)
@@ -383,94 +343,127 @@ public class IntegrationService {
      * Bu metod, Facebook Graph API ile tam olarak implemente edilmelidir.
      */
     public List<Lead> fetchFacebookLeads(UUID organizationId) {
-
-
-
-        logger.info("Organizasyon {} için Facebook Lead'leri çekilmeye çalışılıyor.", organizationId);
-        IntegrationConfig config = integrationConfigRepository.findByOrganizationIdAndPlatform(organizationId, IntegrationPlatform.FACEBOOK)
+        IntegrationConfig config = integrationConfigRepository.findByOrganizationIdAndPlatform(
+                        organizationId, IntegrationPlatform.FACEBOOK)
                 .orElseThrow(() -> new ResourceNotFoundException("Facebook entegrasyonu bu organizasyon için yapılandırılmadı."));
 
-        String accessToken = encryptionService.decrypt(config.getAccessToken());
-        if (accessToken == null) {
-            throw new SecurityException("Facebook erişim token'ı çözülemedi.");
-        }
-        // Sayfa ID'sini config'den al
         String facebookPageId = config.getPlatformPageId();
-        facebookPageId = "2018242931803116";
-        if (facebookPageId == null || facebookPageId.isEmpty()) {
+        if (facebookPageId == null || facebookPageId.isBlank()) {
             logger.error("Organizasyon {} için Facebook Sayfa ID'si yapılandırılmadı. Lead'ler çekilemiyor.", organizationId);
-            throw new IllegalArgumentException("Entegrasyon yapılandırmasında Facebook Sayfa ID'si eksik. OAuth sırasında MANAGE_LEADS iznine sahip bir sayfa seçtiğinizden emin olun.");
+            throw new IllegalArgumentException("Sayfa ID'si eksik. OAuth sırasında lead formu olan bir sayfa seçilmelidir.");
         }
 
+        logger.info("Organizasyon {} için Facebook Lead'leri (sayfa) çekiliyor. PageId={}", organizationId, facebookPageId);
 
+        String userAccessToken = encryptionService.decrypt(config.getAccessToken());
+        if (userAccessToken == null) {
+            throw new SecurityException("Facebook kullanıcı erişim token'ı çözülemedi.");
+        }
+
+        // Sayfa access token’ını al
+        String pageTokenUrl = "https://graph.facebook.com/v18.0/" + facebookPageId
+                + "?fields=access_token&access_token=" + userAccessToken;
+
+        ResponseEntity<Map> pageTokenResponse = restTemplate.exchange(pageTokenUrl, HttpMethod.GET, null, Map.class);
+        Map<String, Object> pageData = pageTokenResponse.getBody();
+        String pageAccessToken = pageData != null ? (String) pageData.get("access_token") : null;
+
+        if (pageAccessToken == null) {
+            throw new RuntimeException("Sayfa erişim token'ı alınamadı. Entegrasyon hatalı olabilir.");
+        }
+
+        List<Lead> fetchedLeads = new ArrayList<>();
         try {
-            // DÜZELTİLEN KISIM: RestFB yerine doğrudan RestTemplate ile leadgen_forms ve leads çekme
-            // LeadgenForm ve Lead (RestFB tipleri) yerine doğrudan Map olarak işleme
-            String leadgenFormsApiUrl = "https://graph.facebook.com/v18.0/" + facebookPageId + "/leadgen_forms?access_token=" + accessToken + "&fields=id,name,leads";
-            ResponseEntity<Map> formsResponse = restTemplate.exchange(leadgenFormsApiUrl, HttpMethod.GET, null, Map.class);
-            List<Map<String, Object>> formsData = (List<Map<String, Object>>) formsResponse.getBody().get("data");
+            // 1) Sayfaya ait tüm lead formları al
+            String formsUrl = "https://graph.facebook.com/v18.0/" + facebookPageId
+                    + "/leadgen_forms?fields=id,name&limit=50&access_token=" + pageAccessToken;
 
-            List<Lead> fetchedLeads = new java.util.ArrayList<>();
-            if (formsData != null) {
-                for (Map<String, Object> formMap : formsData) {
-                    String formId = (String) formMap.get("id");
-                    String formName = (String) formMap.get("name");
-                    logger.info("Facebook Leadgen Form işleniyor: {} ({})", formName, formId);
+            while (formsUrl != null) {
+                ResponseEntity<Map> formsResponse = restTemplate.exchange(formsUrl, HttpMethod.GET, null, Map.class);
+                Map<String, Object> body = formsResponse.getBody();
+                List<Map<String, Object>> formsData = body != null ? (List<Map<String, Object>>) body.get("data") : null;
 
-                    // Her formun lead'lerini çek
-                    Map<String, Object> leadsConnection = (Map<String, Object>) formMap.get("leads");
-                    if (leadsConnection != null && leadsConnection.containsKey("data")) {
-                        List<Map<String, Object>> facebookLeadsData = (List<Map<String, Object>>) leadsConnection.get("data");
-                        for (Map<String, Object> fbLeadData : facebookLeadsData) {
-                            Lead newLead = new Lead();
-                            newLead.setOrganizationId(organizationId);
+                if (formsData != null) {
+                    for (Map<String, Object> formMap : formsData) {
+                        String formId = (String) formMap.get("id");
+                        String formName = (String) formMap.get("name");
+                        if (formId == null) continue;
 
-                            // Facebook lead alanlarını ayrıştır
-                            if (fbLeadData.containsKey("field_data")) {
-                                List<Map<String, String>> fieldDataList = (List<Map<String, String>>) fbLeadData.get("field_data");
-                                if (fieldDataList != null) {
-                                    for (Map<String, String> field : fieldDataList) {
-                                        String fieldName = field.get("name");
-                                        // DÜZELTİLEN KISIM: field.get("values")'tan gelen değeri daha güvenli al
-                                        Object valuesObj = field.get("values");
-                                        String fieldValue = null;
-                                        if (valuesObj instanceof List && !((List<?>)valuesObj).isEmpty()) {
-                                            fieldValue = ((List<?>)valuesObj).get(0).toString();
-                                        } else if (valuesObj instanceof String) {
-                                            fieldValue = (String) valuesObj;
+                        logger.info("Lead form işleniyor: {} ({})", formName, formId);
+
+                        // 2) Formun lead’lerini sayfalayarak çek
+                        String leadsUrl = "https://graph.facebook.com/v18.0/" + formId
+                                + "/leads?fields=field_data,created_time&limit=100&access_token=" + pageAccessToken;
+
+                        while (leadsUrl != null) {
+                            ResponseEntity<Map> leadsResp = restTemplate.exchange(leadsUrl, HttpMethod.GET, null, Map.class);
+                            Map<String, Object> lbody = leadsResp.getBody();
+                            List<Map<String, Object>> leadsData = lbody != null ? (List<Map<String, Object>>) lbody.get("data") : null;
+
+                            if (leadsData != null) {
+                                for (Map<String, Object> fbLeadData : leadsData) {
+                                    Lead newLead = new Lead();
+                                    newLead.setOrganizationId(organizationId);
+
+                                    // field_data -> name/email/phone eşlemesi
+                                    Object fdObj = fbLeadData.get("field_data");
+                                    if (fdObj instanceof List) {
+                                        List<Map<String, Object>> fieldDataList = (List<Map<String, Object>>) fdObj;
+                                        for (Map<String, Object> field : fieldDataList) {
+                                            String fieldName = (String) field.get("name");
+                                            Object valuesObj = field.get("values");
+                                            String fieldValue = null;
+
+                                            if (valuesObj instanceof List && !((List<?>) valuesObj).isEmpty()) {
+                                                fieldValue = ((List<?>) valuesObj).get(0).toString();
+                                            } else if (valuesObj instanceof String) {
+                                                fieldValue = (String) valuesObj;
+                                            }
+
+                                            if (fieldName == null) continue;
+                                            switch (fieldName.toLowerCase(Locale.ROOT)) {
+                                                case "full_name":
+                                                case "name":
+                                                    newLead.setName(fieldValue);
+                                                    break;
+                                                case "email":
+                                                    newLead.setEmail(fieldValue);
+                                                    break;
+                                                case "phone":
+                                                case "phone_number":
+                                                    newLead.setPhone(fieldValue);
+                                                    break;
+                                                default:
+                                                    // İsterseniz burada custom alanları notes içine ekleyebilirsiniz
+                                                    break;
+                                            }
                                         }
-
-                                        if ("full_name".equalsIgnoreCase(fieldName) || "name".equalsIgnoreCase(fieldName)) {
-                                            newLead.setName(fieldValue);
-                                        } else if ("email".equalsIgnoreCase(fieldName)) {
-                                            newLead.setEmail(fieldValue);
-                                        } else if ("phone_number".equalsIgnoreCase(fieldName) || "phone".equalsIgnoreCase(fieldName)) {
-                                            newLead.setPhone(fieldValue);
-                                        }
-                                        // Diğer alanları da burada işleyebilirsiniz
                                     }
+
+                                    newLead.setNotes("Facebook Lead formdan: " + (formName != null ? formName : "") + " - Form ID: " + formId);
+                                    newLead.setStatus(LeadStatus.NEW);
+
+                                    leadRepository.save(newLead);
+                                    fetchedLeads.add(newLead);
+                                    logger.info("Facebook Lead kaydedildi: {}", newLead.getName());
                                 }
                             }
 
-                            newLead.setNotes("Facebook Lead formdan: " + formName + " - Form ID: " + formId);
-                            newLead.setStatus(LeadStatus.NEW); // Varsayılan durum
-                            // created_time'ı Instant'a dönüştürme (eğer çekiliyorsa)
-                            // String createdTimeString = (String) fbLeadData.get("created_time");
-                            // if (createdTimeString != null) {
-                            //     try {
-                            //         newLead.setCreatedAt(Instant.parse(createdTimeString));
-                            //     } catch (Exception e) {
-                            //         logger.warn("Could not parse created_time: {}", createdTimeString, e);
-                            //     }
-                            // }
-
-                            leadRepository.save(newLead);
-                            fetchedLeads.add(newLead);
-                            logger.info("Facebook Lead kaydedildi: {}", newLead.getName());
+                            // sayfalama
+                            Map<String, Object> paging = lbody != null ? (Map<String, Object>) lbody.get("paging") : null;
+                            Map<String, Object> next = paging != null ? (Map<String, Object>) paging.get("cursors") : null; // bazı yanıtlarda direkt "next" stringi de olur
+                            String nextUrl = paging != null ? (String) paging.get("next") : null;
+                            leadsUrl = nextUrl; // next varsa devam, yoksa döngü kırılır
                         }
                     }
                 }
+
+                // forms sayfalama
+                Map<String, Object> paging = body != null ? (Map<String, Object>) body.get("paging") : null;
+                String nextUrl = paging != null ? (String) paging.get("next") : null;
+                formsUrl = nextUrl;
             }
+
             return fetchedLeads;
 
         } catch (Exception e) {
@@ -479,10 +472,12 @@ public class IntegrationService {
         }
     }
 
+
     /**
      * Süresi dolmuş token'ları yenilemek ve aktif entegrasyonlara sahip tüm organizasyonlar için lead'leri çekmek için zamanlanmış görev.
      * Bu basit bir örnektir; gerçek bir uygulamada bunu daha sağlam bir şekilde yönetirsiniz (örn. organizasyon başına zamanlama).
      */
+
     @Scheduled(fixedRate = 3600000) // Her saat çalıştır (3600000 ms)
     public void scheduledLeadSync() {
         logger.info("Tüm organizasyonlar için zamanlanmış lead senkronizasyonu başlatılıyor.");

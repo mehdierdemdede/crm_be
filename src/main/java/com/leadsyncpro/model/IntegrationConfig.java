@@ -74,6 +74,16 @@ public class IntegrationConfig {
     @Column(name = "page_access_token", columnDefinition = "TEXT")
     private String pageAccessToken; // Encrypted Page Access Token
 
+    @Column(name = "last_synced_at")
+    private Instant lastSyncedAt;
+
+    @Column(name = "last_lead_created_time")
+    private Instant lastLeadCreatedTime;
+
+    @Column(name = "page_token_updated_at")
+    private Instant pageTokenUpdatedAt;
+
+
     @PrePersist
     protected void onCreate() {
         createdAt = Instant.now();
