@@ -1,5 +1,6 @@
 package com.leadsyncpro.repository;
 
+import com.leadsyncpro.model.IntegrationPlatform;
 import com.leadsyncpro.model.Lead;
 import com.leadsyncpro.model.LeadStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -27,4 +28,8 @@ public interface LeadRepository extends JpaRepository<Lead, UUID> {
             @Param("campaignId") UUID campaignId,
             @Param("status") LeadStatus status,
             @Param("assignedToUserId") UUID assignedToUserId);
+
+    boolean existsByOrganizationIdAndPlatformAndSourceLeadId(
+            UUID organizationId, IntegrationPlatform platform, String sourceLeadId);
+
 }

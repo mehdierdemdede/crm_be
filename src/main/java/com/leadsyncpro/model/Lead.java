@@ -5,22 +5,17 @@ import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
 import org.hibernate.annotations.GenericGenerator;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.Table;
-import jakarta.persistence.Id;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.Column;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.PrePersist;
-import jakarta.persistence.PreUpdate;
+import jakarta.persistence.*;
 import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(name = "leads")
+@Table(
+        name = "leads",
+        indexes = {
+                @Index(name = "idx_leads_org_platform_sourceid", columnList = "organization_id,platform,source_lead_id")
+        }
+)
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -32,7 +27,7 @@ public class Lead {
     private UUID id;
 
     @Column(name = "organization_id", nullable = false)
-    private UUID organizationId; // Discriminator column for multi-tenancy
+    private UUID organizationId;
 
     @Column(nullable = false)
     private String name;
@@ -49,23 +44,71 @@ public class Lead {
     @Column(columnDefinition = "TEXT")
     private String notes;
 
-    @ManyToOne // Many leads can belong to one campaign
-    @JoinColumn(name = "campaign_id") // Foreign key column
-    private Campaign campaign; // Link to Campaign entity
+    @ManyToOne
+    @JoinColumn(name = "campaign_id")
+    private Campaign campaign;
 
-    @Enumerated(EnumType.STRING) // Store enum as string in DB
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 50)
-    private LeadStatus status; // Enum for lead status
+    private LeadStatus status;
 
-    @ManyToOne // Many leads can be assigned to one user
-    @JoinColumn(name = "assigned_to_user_id") // Foreign key column
-    private User assignedToUser; // Link to User entity
+    @ManyToOne
+    @JoinColumn(name = "assigned_to_user_id")
+    private User assignedToUser;
 
     @Column(name = "created_at", updatable = false)
     private Instant createdAt;
 
     @Column(name = "updated_at")
     private Instant updatedAt;
+
+    // ------------------- Facebook Graph API ek alanlar -------------------
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "platform", length = 50, nullable = false)
+    private IntegrationPlatform platform; // FACEBOOK | GOOGLE
+
+    @Column(name = "source_lead_id", length = 100)
+    private String sourceLeadId; // FB lead id
+
+    @Column(name = "platform_created_at")
+    private Instant platformCreatedAt; // created_time
+
+    @Column(name = "page_id", length = 100)
+    private String pageId;
+
+    @Column(name = "form_id", length = 100)
+    private String formId;
+
+    @Column(name = "form_name", length = 255)
+    private String formName;
+
+    @Column(name = "is_organic")
+    private Boolean organic;
+
+    @Column(name = "ad_id", length = 100)
+    private String adId;
+
+    @Column(name = "ad_name", length = 255)
+    private String adName;
+
+    @Column(name = "adset_id", length = 100)
+    private String adsetId;
+
+    @Column(name = "adset_name", length = 255)
+    private String adsetName;
+
+    @Column(name = "fb_campaign_id", length = 100)
+    private String fbCampaignId;
+
+    @Column(name = "fb_campaign_name", length = 255)
+    private String fbCampaignName;
+
+    @Column(name = "extra_fields_json", columnDefinition = "TEXT")
+    private String extraFieldsJson;
+
+    @Column(name = "disclaimer_responses_json", columnDefinition = "TEXT")
+    private String disclaimerResponsesJson;
 
     @PrePersist
     protected void onCreate() {

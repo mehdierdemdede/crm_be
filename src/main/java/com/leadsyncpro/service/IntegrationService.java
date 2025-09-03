@@ -2,6 +2,9 @@
 package com.leadsyncpro.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.pemistahl.lingua.api.Language;
+import com.github.pemistahl.lingua.api.LanguageDetector;
+import com.github.pemistahl.lingua.api.LanguageDetectorBuilder;
 import com.leadsyncpro.exception.ResourceNotFoundException;
 import com.leadsyncpro.model.IntegrationConfig;
 import com.leadsyncpro.model.IntegrationPlatform;
@@ -47,6 +50,47 @@ public class IntegrationService {
 
     @Value("${app.encryption.key}")
     private String encryptionKey;
+
+    private static String asString(Object o) { return o == null ? null : o.toString(); }
+    private static String safe(String s) { return s == null ? "" : s; }
+    private static boolean isBlank(String s) { return s == null || s.trim().isEmpty(); }
+    private static Instant parseInstant(String iso) {
+        try { return iso != null ? Instant.parse(iso) : null; } catch (Exception e) { return null; }
+    }
+    private static Boolean asBoolean(Object o) {
+        if (o instanceof Boolean) return (Boolean) o;
+        if (o instanceof String) return "true".equalsIgnoreCase((String) o);
+        return null;
+    }
+    private static String firstValue(Object values) {
+        if (values instanceof List && !((List<?>) values).isEmpty()) {
+            Object v0 = ((List<?>) values).get(0);
+            return v0 != null ? v0.toString() : null;
+        } else if (values instanceof String) {
+            return (String) values;
+        }
+        return null;
+    }
+    @SuppressWarnings("unchecked")
+    private static String nextUrl(Map body) {
+        if (body == null) return null;
+        Map<String,Object> paging = (Map<String,Object>) body.get("paging");
+        if (paging == null) return null;
+        return (String) paging.get("next");
+    }
+
+    private static final LanguageDetector detector = LanguageDetectorBuilder
+            .fromAllLanguages()
+            .withPreloadedLanguageModels()
+            .build();
+
+
+    public static String detectLanguageFromText(String text) {
+        if (text == null || text.isBlank()) return null;
+        Language lang = detector.detectLanguageOf(text);
+        return lang != null ? lang.getIsoCode639_1().name() : null; // örn: "EN"
+    }
+
 
     public IntegrationService(IntegrationConfigRepository integrationConfigRepository,
                               EncryptionService encryptionService,
@@ -343,133 +387,185 @@ public class IntegrationService {
      * Bu metod, Facebook Graph API ile tam olarak implemente edilmelidir.
      */
     public List<Lead> fetchFacebookLeads(UUID organizationId) {
-        IntegrationConfig config = integrationConfigRepository.findByOrganizationIdAndPlatform(
-                        organizationId, IntegrationPlatform.FACEBOOK)
-                .orElseThrow(() -> new ResourceNotFoundException("Facebook entegrasyonu bu organizasyon için yapılandırılmadı."));
+        IntegrationConfig config = integrationConfigRepository
+                .findByOrganizationIdAndPlatform(organizationId, IntegrationPlatform.FACEBOOK)
+                .orElseThrow(() -> new ResourceNotFoundException("Facebook entegrasyonu yok."));
 
-        String facebookPageId = config.getPlatformPageId();
-        if (facebookPageId == null || facebookPageId.isBlank()) {
-            logger.error("Organizasyon {} için Facebook Sayfa ID'si yapılandırılmadı. Lead'ler çekilemiyor.", organizationId);
-            throw new IllegalArgumentException("Sayfa ID'si eksik. OAuth sırasında lead formu olan bir sayfa seçilmelidir.");
+        String pageId = config.getPlatformPageId();
+        if (pageId == null || pageId.isBlank()) {
+            throw new IllegalArgumentException("Facebook Sayfa ID eksik.");
         }
 
-        logger.info("Organizasyon {} için Facebook Lead'leri (sayfa) çekiliyor. PageId={}", organizationId, facebookPageId);
 
         String userAccessToken = encryptionService.decrypt(config.getAccessToken());
-        if (userAccessToken == null) {
-            throw new SecurityException("Facebook kullanıcı erişim token'ı çözülemedi.");
-        }
+        if (userAccessToken == null) throw new SecurityException("User access token çözülemedi.");
 
-        // Sayfa access token’ını al
-        String pageTokenUrl = "https://graph.facebook.com/v18.0/" + facebookPageId
-                + "?fields=access_token&access_token=" + userAccessToken;
-
-        ResponseEntity<Map> pageTokenResponse = restTemplate.exchange(pageTokenUrl, HttpMethod.GET, null, Map.class);
-        Map<String, Object> pageData = pageTokenResponse.getBody();
-        String pageAccessToken = pageData != null ? (String) pageData.get("access_token") : null;
-
-        if (pageAccessToken == null) {
-            throw new RuntimeException("Sayfa erişim token'ı alınamadı. Entegrasyon hatalı olabilir.");
-        }
-
-        List<Lead> fetchedLeads = new ArrayList<>();
+        // Sayfa access token
+        String pageAccessToken = null;
         try {
-            // 1) Sayfaya ait tüm lead formları al
-            String formsUrl = "https://graph.facebook.com/v18.0/" + facebookPageId
-                    + "/leadgen_forms?fields=id,name&limit=50&access_token=" + pageAccessToken;
+            Map pageResp = restTemplate.getForObject(
+                    "https://graph.facebook.com/v18.0/{pageId}?fields=access_token&access_token={uat}",
+                    Map.class, pageId, userAccessToken
+            );
+            if (pageResp != null) pageAccessToken = (String) pageResp.get("access_token");
+        } catch (Exception ignored) {}
+        if (pageAccessToken == null) throw new RuntimeException("Page access token alınamadı.");
 
-            while (formsUrl != null) {
-                ResponseEntity<Map> formsResponse = restTemplate.exchange(formsUrl, HttpMethod.GET, null, Map.class);
-                Map<String, Object> body = formsResponse.getBody();
-                List<Map<String, Object>> formsData = body != null ? (List<Map<String, Object>>) body.get("data") : null;
+        final String LEAD_FIELDS = String.join(",",
+                "id",
+                "created_time",
+                "ad_id","ad_name",
+                "adset_id","adset_name",
+                "campaign_id","campaign_name",
+                "form_id",
+                "is_organic",
+                "field_data",
+                "custom_disclaimer_responses"
+        );
 
-                if (formsData != null) {
-                    for (Map<String, Object> formMap : formsData) {
-                        String formId = (String) formMap.get("id");
-                        String formName = (String) formMap.get("name");
-                        if (formId == null) continue;
+        List<Lead> result = new ArrayList<>();
 
-                        logger.info("Lead form işleniyor: {} ({})", formName, formId);
+        // 1) Formlar
+        String formsUrl = "https://graph.facebook.com/v18.0/" + pageId
+                + "/leadgen_forms?fields=id,name&limit=50&access_token=" + pageAccessToken;
 
-                        // 2) Formun lead’lerini sayfalayarak çek
-                        String leadsUrl = "https://graph.facebook.com/v18.0/" + formId
-                                + "/leads?fields=field_data,created_time&limit=100&access_token=" + pageAccessToken;
+        while (formsUrl != null) {
+            ResponseEntity<Map> formsResponse = restTemplate.exchange(formsUrl, HttpMethod.GET, null, Map.class);
+            Map body = formsResponse.getBody();
+            List<Map<String,Object>> forms = body != null ? (List<Map<String,Object>>) body.get("data") : null;
 
-                        while (leadsUrl != null) {
-                            ResponseEntity<Map> leadsResp = restTemplate.exchange(leadsUrl, HttpMethod.GET, null, Map.class);
-                            Map<String, Object> lbody = leadsResp.getBody();
-                            List<Map<String, Object>> leadsData = lbody != null ? (List<Map<String, Object>>) lbody.get("data") : null;
+            if (forms != null) {
+                for (Map<String,Object> form : forms) {
+                    String formId = (String) form.get("id");
+                    String formName = (String) form.get("name");
+                    if (formId == null) continue;
 
-                            if (leadsData != null) {
-                                for (Map<String, Object> fbLeadData : leadsData) {
-                                    Lead newLead = new Lead();
-                                    newLead.setOrganizationId(organizationId);
+                    // 2) Lead’ler (sayfalama)
+                    String leadsUrl = "https://graph.facebook.com/v18.0/" + formId
+                            + "/leads?fields=" + LEAD_FIELDS + "&limit=100&access_token=" + pageAccessToken;
 
-                                    // field_data -> name/email/phone eşlemesi
-                                    Object fdObj = fbLeadData.get("field_data");
-                                    if (fdObj instanceof List) {
-                                        List<Map<String, Object>> fieldDataList = (List<Map<String, Object>>) fdObj;
-                                        for (Map<String, Object> field : fieldDataList) {
-                                            String fieldName = (String) field.get("name");
-                                            Object valuesObj = field.get("values");
-                                            String fieldValue = null;
+                    while (leadsUrl != null) {
+                        ResponseEntity<Map> leadsResp = restTemplate.exchange(leadsUrl, HttpMethod.GET, null, Map.class);
+                        Map lbody = leadsResp.getBody();
+                        List<Map<String,Object>> leads = lbody != null ? (List<Map<String,Object>>) lbody.get("data") : null;
 
-                                            if (valuesObj instanceof List && !((List<?>) valuesObj).isEmpty()) {
-                                                fieldValue = ((List<?>) valuesObj).get(0).toString();
-                                            } else if (valuesObj instanceof String) {
-                                                fieldValue = (String) valuesObj;
-                                            }
+                        if (leads != null) {
+                            for (Map<String,Object> fbLead : leads) {
+                                // --- Idempotency
+                                String fbLeadId = asString(fbLead.get("id"));
+                                if (fbLeadId != null && leadRepository.existsByOrganizationIdAndPlatformAndSourceLeadId(
+                                        organizationId, IntegrationPlatform.FACEBOOK, fbLeadId)) {
+                                    continue;
+                                }
 
-                                            if (fieldName == null) continue;
-                                            switch (fieldName.toLowerCase(Locale.ROOT)) {
-                                                case "full_name":
-                                                case "name":
-                                                    newLead.setName(fieldValue);
-                                                    break;
-                                                case "email":
-                                                    newLead.setEmail(fieldValue);
-                                                    break;
-                                                case "phone":
-                                                case "phone_number":
-                                                    newLead.setPhone(fieldValue);
-                                                    break;
-                                                default:
-                                                    // İsterseniz burada custom alanları notes içine ekleyebilirsiniz
-                                                    break;
-                                            }
+                                // --- Temel alanlar
+                                String createdTimeStr = asString(fbLead.get("created_time"));
+                                Instant platformCreatedAt = parseInstant(createdTimeStr);
+
+                                String adId    = asString(fbLead.get("ad_id"));
+                                String adName  = asString(fbLead.get("ad_name"));
+                                String adsetId = asString(fbLead.get("adset_id"));
+                                String adsetNm = asString(fbLead.get("adset_name"));
+                                String campId  = asString(fbLead.get("campaign_id"));
+                                String campNm  = asString(fbLead.get("campaign_name"));
+                                Boolean organic = asBoolean(fbLead.get("is_organic"));
+
+                                // --- field_data: name/email/phone + kalanları extras’a
+                                String name = null, email = null, phone = null, firstName = null, lastName = null;
+                                Map<String,Object> extras = new LinkedHashMap<>();
+
+                                Object fdObj = fbLead.get("field_data");
+                                if (fdObj instanceof List) {
+                                    List<Map<String,Object>> fieldData = (List<Map<String,Object>>) fdObj;
+                                    for (Map<String,Object> f : fieldData) {
+                                        String fname = asString(f.get("name"));
+                                        String fval  = firstValue(f.get("values"));
+                                        if (fname == null) continue;
+
+                                        switch (fname.toLowerCase()) {
+                                            case "full_name":
+                                            case "name":        if (isBlank(name)) name = fval; break;
+                                            case "first_name":  firstName = fval; break;
+                                            case "last_name":   lastName  = fval; break;
+                                            case "email":       email     = fval; break;
+                                            case "phone":
+                                            case "phone_number":phone     = fval; break;
+                                            case "language":    /* dil alanın varsa */ ; break;
+                                            default:
+                                                // custom alanları kaçırma
+                                                if (fval != null) extras.put(fname, fval);
                                         }
                                     }
-
-                                    newLead.setNotes("Facebook Lead formdan: " + (formName != null ? formName : "") + " - Form ID: " + formId);
-                                    newLead.setStatus(LeadStatus.NEW);
-
-                                    leadRepository.save(newLead);
-                                    fetchedLeads.add(newLead);
-                                    logger.info("Facebook Lead kaydedildi: {}", newLead.getName());
                                 }
-                            }
+                                if (isBlank(name) && (!isBlank(firstName) || !isBlank(lastName))) {
+                                    name = (safe(firstName) + " " + safe(lastName)).trim();
+                                }
+                                if (isBlank(name)) {
+                                    name = !isBlank(email) ? email :
+                                            !isBlank(phone) ? phone :
+                                                    "Facebook Lead" + (isBlank(formName) ? "" : " - " + formName)
+                                                            + (fbLeadId != null ? " (" + fbLeadId + ")" : "");
+                                }
 
-                            // sayfalama
-                            Map<String, Object> paging = lbody != null ? (Map<String, Object>) lbody.get("paging") : null;
-                            Map<String, Object> next = paging != null ? (Map<String, Object>) paging.get("cursors") : null; // bazı yanıtlarda direkt "next" stringi de olur
-                            String nextUrl = paging != null ? (String) paging.get("next") : null;
-                            leadsUrl = nextUrl; // next varsa devam, yoksa döngü kırılır
+                                // --- disclaimer_responses JSON
+                                String disclaimerJson = null;
+                                try {
+                                    Object dr = fbLead.get("custom_disclaimer_responses");
+                                    if (dr != null) disclaimerJson = objectMapper.writeValueAsString(dr);
+                                } catch (Exception ignored) {}
+
+                                // --- extras JSON
+                                String extrasJson = null;
+                                try {
+                                    if (!extras.isEmpty()) extrasJson = objectMapper.writeValueAsString(extras);
+                                } catch (Exception ignored) {}
+                                String langCode = detectLanguageFromText(formName);
+
+                                // --- Persist
+                                Lead entity = new Lead();
+                                if (langCode != null) {
+                                    entity.setLanguage(langCode);
+                                }
+                                entity.setOrganizationId(organizationId);
+                                entity.setPlatform(IntegrationPlatform.FACEBOOK);
+                                entity.setSourceLeadId(fbLeadId);
+                                entity.setName(name);
+                                entity.setEmail(email);
+                                entity.setPhone(phone);
+                                entity.setNotes("Facebook Lead formdan: " + safe(formName) + " - Form ID: " + formId);
+                                entity.setStatus(LeadStatus.NEW);
+
+                                // geniş alanlar (entity’nde varsa)
+                                entity.setPlatformCreatedAt(platformCreatedAt);
+                                entity.setPageId(pageId);
+                                entity.setFormId(formId);
+                                entity.setFormName(formName);
+                                entity.setOrganic(organic);
+                                entity.setAdId(adId);
+                                entity.setAdName(adName);
+                                entity.setAdsetId(adsetId);
+                                entity.setAdsetName(adsetNm);
+                                entity.setFbCampaignId(campId);
+                                entity.setFbCampaignName(campNm);
+                                entity.setDisclaimerResponsesJson(disclaimerJson);
+                                entity.setExtraFieldsJson(extrasJson);
+
+                                leadRepository.save(entity);
+                                result.add(entity);
+                            }
                         }
+
+                        // leads paging
+                        leadsUrl = nextUrl(lbody);
                     }
                 }
-
-                // forms sayfalama
-                Map<String, Object> paging = body != null ? (Map<String, Object>) body.get("paging") : null;
-                String nextUrl = paging != null ? (String) paging.get("next") : null;
-                formsUrl = nextUrl;
             }
 
-            return fetchedLeads;
-
-        } catch (Exception e) {
-            logger.error("Organizasyon {} için Facebook Lead'leri çekilirken hata oluştu: {}", organizationId, e.getMessage());
-            throw new RuntimeException("Facebook Lead'leri çekilirken hata oluştu: " + e.getMessage(), e);
+            // forms paging
+            formsUrl = nextUrl(body);
         }
+
+        return result;
     }
 
 
