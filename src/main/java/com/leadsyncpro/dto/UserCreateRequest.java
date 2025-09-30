@@ -10,12 +10,14 @@ import java.util.UUID;
 
 @Data
 public class UserCreateRequest {
-    private UUID organizationId; // For SuperAdmin to specify
+    private UUID organizationId; // Sadece SUPER_ADMIN için
     @NotBlank
     @Email
     private String email;
-    @NotBlank
+
+    // Invite flow için password zorunlu olmamalı
     private String password;
+
     private String firstName;
     private String lastName;
     @NotNull

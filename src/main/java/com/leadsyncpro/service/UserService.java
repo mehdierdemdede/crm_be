@@ -17,10 +17,13 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final InviteService inviteService;
 
-    public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+
+    public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder, InviteService inviteService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.inviteService = inviteService;
     }
 
     @Transactional
@@ -80,10 +83,6 @@ public class UserService {
                 .orElseThrow(() -> new ResourceNotFoundException("User not found or access denied."));
     }
 
-    public Optional<User> findByEmailAndOrganizationId(String email, UUID organizationId) {
-        return userRepository.findByOrganizationIdAndEmail(organizationId, email);
-    }
-
     public Optional<User> findByEmail(String email) {
         return userRepository.findByEmail(email); // For SuperAdmin login
     }
@@ -98,4 +97,29 @@ public class UserService {
         return userRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + id));
     }
+
+
+    @Transactional
+    public User createAndInviteUser(UUID orgId, String email, String firstName, String lastName, Role role) {
+        if (userRepository.existsByOrganizationIdAndEmail(orgId, email)) {
+            throw new IllegalArgumentException("User with this email already exists in this organization.");
+        }
+
+        User user = new User();
+        user.setOrganizationId(orgId);
+        user.setEmail(email.toLowerCase());
+        user.setPasswordHash(null);
+        user.setFirstName(firstName);
+        user.setLastName(lastName);
+        user.setRole(role);
+        user.setActive(false);
+
+        userRepository.save(user);
+
+        // Invite + mail aynı transaction içinde
+        inviteService.createInvite(user);
+
+        return user;
+    }
+
 }

@@ -7,21 +7,27 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 
-@Getter
 public class UserPrincipal implements UserDetails {
-    private UUID id;
-    private UUID organizationId;
-    private String email;
-    private String password;
-    private Role role;
-    private Collection<? extends GrantedAuthority> authorities;
+    // 👉 Controller'larda erişmek için gerekli getter’lar
+    @Getter
+    private final UUID id;
+    @Getter
+    private final UUID organizationId;
+    @Getter
+    private final String email;
+    private final String password;
+    @Getter
+    private final Role role;
+    private final Collection<? extends GrantedAuthority> authorities;
 
-    public UserPrincipal(UUID id, UUID organizationId, String email, String password, Role role, Collection<? extends GrantedAuthority> authorities) {
+    public UserPrincipal(UUID id,
+                         UUID organizationId,
+                         String email,
+                         String password,
+                         Role role,
+                         Collection<? extends GrantedAuthority> authorities) {
         this.id = id;
         this.organizationId = organizationId;
         this.email = email;
@@ -31,7 +37,8 @@ public class UserPrincipal implements UserDetails {
     }
 
     public static UserPrincipal create(User user) {
-        List<GrantedAuthority> authorities = Collections.singletonList(new SimpleGrantedAuthority(user.getRole().name()));
+        List<GrantedAuthority> authorities =
+                Collections.singletonList(new SimpleGrantedAuthority(user.getRole().name()));
 
         return new UserPrincipal(
                 user.getId(),
@@ -54,7 +61,7 @@ public class UserPrincipal implements UserDetails {
     }
 
     @Override
-    public String getUsername() { // This is used for the username field in Spring Security, which is email here
+    public String getUsername() {
         return email;
     }
 
@@ -75,6 +82,6 @@ public class UserPrincipal implements UserDetails {
 
     @Override
     public boolean isEnabled() {
-        return true; // user.isActive()
+        return true; // Eğer user.isActive kullanmak istersen, buraya DB alanını koyabilirsin
     }
 }

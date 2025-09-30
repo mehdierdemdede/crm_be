@@ -1,20 +1,28 @@
 // src/main/java/com/leadsyncpro/controller/UserController.java
 package com.leadsyncpro.controller;
 
+import com.leadsyncpro.dto.InviteAcceptRequest;
 import com.leadsyncpro.dto.UserCreateRequest;
+import com.leadsyncpro.dto.UserResponse;
 import com.leadsyncpro.dto.UserUpdateRequest;
 import com.leadsyncpro.model.Role;
 import com.leadsyncpro.model.User;
+import com.leadsyncpro.repository.InviteTokenRepository;
+import com.leadsyncpro.repository.UserRepository;
+import com.leadsyncpro.service.InviteService;
+import com.leadsyncpro.service.OrganizationService;
 import com.leadsyncpro.service.UserService;
 import com.leadsyncpro.security.UserPrincipal;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.validation.Valid;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -22,9 +30,48 @@ import java.util.UUID;
 public class UserController {
 
     private final UserService userService;
+    private final InviteService inviteService;
+    private final InviteTokenRepository inviteTokenRepository;
+    private final UserRepository userRepository;
+    private final OrganizationService organizationService; // plan limit bilgisi
+    private final PasswordEncoder passwordEncoder;
 
-    public UserController(UserService userService) {
+    public UserController(UserService userService, InviteService inviteService,
+                          InviteTokenRepository inviteTokenRepository, UserRepository userRepository,
+                          OrganizationService organizationService, PasswordEncoder passwordEncoder) {
         this.userService = userService;
+        this.inviteService = inviteService;
+        this.inviteTokenRepository = inviteTokenRepository;
+        this.userRepository = userRepository;
+        this.organizationService = organizationService;
+        this.passwordEncoder = passwordEncoder;
+    }
+
+
+    @PostMapping("/invite")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'SUPER_ADMIN')")
+    public ResponseEntity<?> inviteUser(
+            @RequestBody @Valid UserCreateRequest req,
+            @AuthenticationPrincipal UserPrincipal principal
+    ) {
+        UUID orgId = principal.getOrganizationId();
+        if (principal.getRole() == Role.SUPER_ADMIN && req.getOrganizationId() != null) {
+            orgId = req.getOrganizationId();
+        }
+
+        User u = userService.createAndInviteUser(orgId, req.getEmail(), req.getFirstName(),
+                req.getLastName(), req.getRole());
+        return ResponseEntity.status(HttpStatus.CREATED).body(UserResponse.from(u));
+    }
+
+    @PostMapping("/invite/accept")
+    public ResponseEntity<?> acceptInvite(@RequestBody InviteAcceptRequest req) {
+        try {
+            inviteService.acceptInvite(req.getToken(), req.getPassword(), passwordEncoder, userRepository);
+            return ResponseEntity.ok(Map.of("message", "Password set, account activated"));
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", ex.getMessage()));
+        }
     }
 
     // Create User (Admin or SuperAdmin)
@@ -32,10 +79,11 @@ public class UserController {
     @PreAuthorize("hasAnyAuthority('ADMIN', 'SUPER_ADMIN')")
     public ResponseEntity<User> createUser(@Valid @RequestBody UserCreateRequest request,
                                            @AuthenticationPrincipal UserPrincipal currentUser) {
-        // SuperAdmin can create users for any organization, Admin only for their own
-        UUID targetOrgId = currentUser.getRole() == Role.SUPER_ADMIN ? request.getOrganizationId() : currentUser.getOrganizationId();
+        UUID targetOrgId = currentUser.getRole() == Role.SUPER_ADMIN
+                ? request.getOrganizationId()
+                : currentUser.getOrganizationId();
         if (targetOrgId == null) {
-            return new ResponseEntity<>(HttpStatus.BAD_REQUEST); // Org ID required for SuperAdmin creating new org user
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
         }
 
         User newUser = userService.createUser(

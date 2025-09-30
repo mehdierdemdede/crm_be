@@ -48,15 +48,11 @@ public class AuthController {
     public ResponseEntity<?> authenticateUser(@Valid @RequestBody LoginRequest loginRequest) {
         logger.info("Login attempt for email: {} in organization: {}", loginRequest.getEmail(), loginRequest.getOrganizationId());
 
-        User user = null;
-
-            user = userService.findByEmail(loginRequest.getEmail())
-                    .filter(u -> u.getRole() == Role.SUPER_ADMIN)
-                    .orElse(null);
-
+        User user = userService.findByEmail(loginRequest.getEmail())
+                .orElse(null);
 
         if (user == null) {
-            logger.warn("User not found or role mismatch for email: {} in organization: {}", loginRequest.getEmail(), loginRequest.getOrganizationId());
+            logger.warn("User not found or role mismatch for email: {} in organization  : {}", loginRequest.getEmail(), loginRequest.getOrganizationId());
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid credentials or organization ID.");
         }
 

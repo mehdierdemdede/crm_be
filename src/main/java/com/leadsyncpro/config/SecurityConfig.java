@@ -85,6 +85,7 @@ public class SecurityConfig {
                 .sessionManagement(sessionManagement -> sessionManagement.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll()
+                        .requestMatchers("/api/users/invite/accept").permitAll() // <-- burayı ekledik
                         .requestMatchers("/api/integrations/oauth2/**").permitAll()
                         .requestMatchers("/error").permitAll()
                         .requestMatchers("/favicon.ico").permitAll()
