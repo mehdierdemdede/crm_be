@@ -3,30 +3,38 @@ package com.leadsyncpro.service;
 import com.leadsyncpro.dto.LeadCreateRequest;
 import com.leadsyncpro.dto.LeadUpdateRequest;
 import com.leadsyncpro.exception.ResourceNotFoundException;
-import com.leadsyncpro.model.Campaign;
-import com.leadsyncpro.model.Lead;
-import com.leadsyncpro.model.LeadStatus;
-import com.leadsyncpro.model.User;
+import com.leadsyncpro.model.*;
 import com.leadsyncpro.repository.CampaignRepository;
 import com.leadsyncpro.repository.LeadRepository;
+import com.leadsyncpro.repository.LeadStatusLogRepository;
 import com.leadsyncpro.repository.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
+
 
 @Service
 public class LeadService {
 
+    private static final Logger logger = LoggerFactory.getLogger(LeadService.class);
+
     private final LeadRepository leadRepository;
     private final CampaignRepository campaignRepository;
     private final UserRepository userRepository;
+    private final LeadStatusLogRepository leadStatusLogRepository;
 
-    public LeadService(LeadRepository leadRepository, CampaignRepository campaignRepository, UserRepository userRepository) {
+    public LeadService(LeadRepository leadRepository, CampaignRepository campaignRepository, UserRepository userRepository, LeadStatusLogRepository leadStatusLogRepository) {
         this.leadRepository = leadRepository;
         this.campaignRepository = campaignRepository;
         this.userRepository = userRepository;
+        this.leadStatusLogRepository = leadStatusLogRepository;
     }
 
     @Transactional
@@ -134,5 +142,43 @@ public class LeadService {
         }
 
         return leadRepository.findByOrganizationIdAndFilters(organizationId, campaignId, leadStatus, assignedToUserId);
+    }
+
+    @Transactional
+    public Lead updateLeadStatus(UUID leadId, LeadStatus newStatus, UUID userId) {
+        Lead lead = leadRepository.findById(leadId)
+                .orElseThrow(() -> new ResourceNotFoundException("Lead not found with ID: " + leadId));
+
+        LeadStatus oldStatus = lead.getStatus();
+        if (oldStatus == newStatus) return lead; // değişim yoksa loglama gerekmez
+
+        lead.setStatus(newStatus);
+        lead.setUpdatedAt(Instant.now());
+        leadRepository.save(lead);
+
+        // Log kaydı
+        LeadStatusLog log = LeadStatusLog.builder()
+                .leadId(leadId)
+                .oldStatus(oldStatus)
+                .newStatus(newStatus)
+                .changedBy(userId)
+                .build();
+
+        leadStatusLogRepository.save(log);
+
+        logger.info("Lead {} status changed: {} → {}", leadId, oldStatus, newStatus);
+
+        return lead;
+    }
+
+    @Scheduled(cron = "0 0 2 * * *") // her gece 02:00'de
+    @Transactional
+    public void autoCloseLeads() {
+        Instant sevenDaysAgo = Instant.now().minus(7, ChronoUnit.DAYS);
+        List<Lead> oldProposals = leadRepository.findAllByStatusAndUpdatedAtBefore(LeadStatus.PROPOSAL_SENT, sevenDaysAgo);
+
+        for (Lead lead : oldProposals) {
+            updateLeadStatus(lead.getId(), LeadStatus.CLOSED_LOST, UUID.randomUUID()); // system user gibi davran
+        }
     }
 }

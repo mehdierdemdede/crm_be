@@ -6,12 +6,10 @@ import com.github.pemistahl.lingua.api.Language;
 import com.github.pemistahl.lingua.api.LanguageDetector;
 import com.github.pemistahl.lingua.api.LanguageDetectorBuilder;
 import com.leadsyncpro.exception.ResourceNotFoundException;
-import com.leadsyncpro.model.IntegrationConfig;
-import com.leadsyncpro.model.IntegrationPlatform;
-import com.leadsyncpro.model.Lead;
-import com.leadsyncpro.model.LeadStatus;
+import com.leadsyncpro.model.*;
 import com.leadsyncpro.repository.CampaignRepository;
 import com.leadsyncpro.repository.IntegrationConfigRepository;
+import com.leadsyncpro.repository.IntegrationLogRepository;
 import com.leadsyncpro.repository.LeadRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,7 +18,6 @@ import org.springframework.http.*;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.oauth2.client.registration.ClientRegistration;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
-import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.LinkedMultiValueMap;
@@ -31,7 +28,6 @@ import org.springframework.web.util.UriComponentsBuilder;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
-import java.util.stream.Collectors;
 
 
 @Service
@@ -44,6 +40,7 @@ public class IntegrationService {
     private final ClientRegistrationRepository clientRegistrationRepository;
     private final RestTemplate restTemplate;
     private final LeadRepository leadRepository;
+    private final IntegrationLogRepository integrationLogRepository;
     private final CampaignRepository campaignRepository;
     private final ObjectMapper objectMapper;
 
@@ -54,6 +51,7 @@ public class IntegrationService {
     private static String asString(Object o) { return o == null ? null : o.toString(); }
     private static String safe(String s) { return s == null ? "" : s; }
     private static boolean isBlank(String s) { return s == null || s.trim().isEmpty(); }
+
     private static Instant parseInstant(String iso) {
         try { return iso != null ? Instant.parse(iso) : null; } catch (Exception e) { return null; }
     }
@@ -96,7 +94,8 @@ public class IntegrationService {
                               EncryptionService encryptionService,
                               ClientRegistrationRepository clientRegistrationRepository,
                               LeadRepository leadRepository,
-                              CampaignRepository campaignRepository) {
+                              CampaignRepository campaignRepository,
+                              IntegrationLogRepository integrationLogRepository) {
         this.integrationConfigRepository = integrationConfigRepository;
         this.encryptionService = encryptionService;
         this.clientRegistrationRepository = clientRegistrationRepository;
@@ -104,7 +103,9 @@ public class IntegrationService {
         this.leadRepository = leadRepository;
         this.campaignRepository = campaignRepository;
         this.objectMapper = new ObjectMapper();
+        this.integrationLogRepository = integrationLogRepository;
     }
+
 
     @Transactional
     public IntegrationConfig saveIntegrationConfig(UUID organizationId, IntegrationPlatform platform,
@@ -364,209 +365,267 @@ public class IntegrationService {
      * Google Lead Ads API'den lead'leri çeker.
      * Bu metod, Google Ads API istemci kütüphanesiyle tam olarak implemente edilmelidir.
      */
+    @Transactional
     public List<Lead> fetchGoogleLeads(UUID organizationId) {
-        logger.info("Organizasyon {} için Google Lead'leri çekilmeye çalışılıyor.", organizationId);
-        IntegrationConfig config = integrationConfigRepository.findByOrganizationIdAndPlatform(organizationId, IntegrationPlatform.GOOGLE)
-                .orElseThrow(() -> new ResourceNotFoundException("Google entegrasyonu bu organizasyon için yapılandırılmadı."));
+        IntegrationLog runLog = IntegrationLog.builder()
+                .organizationId(organizationId)
+                .platform(IntegrationPlatform.GOOGLE)
+                .startedAt(Instant.now())
+                .build();
 
-        String accessToken = encryptionService.decrypt(config.getAccessToken());
-        if (accessToken == null) {
-            throw new SecurityException("Google erişim token'ı çözülemedi.");
+        int createdCount = 0;
+        int updatedCount = 0;
+        List<Lead> result = new ArrayList<>();
+
+        try {
+            logger.info("Organizasyon {} için Google Lead'leri çekilmeye çalışılıyor.", organizationId);
+            IntegrationConfig config = integrationConfigRepository.findByOrganizationIdAndPlatform(
+                            organizationId, IntegrationPlatform.GOOGLE)
+                    .orElseThrow(() -> new ResourceNotFoundException("Google entegrasyonu bu organizasyon için yapılandırılmadı."));
+
+            String accessToken = encryptionService.decrypt(config.getAccessToken());
+            if (accessToken == null) {
+                throw new SecurityException("Google erişim token'ı çözülemedi.");
+            }
+
+            String customerId = config.getPlatformPageId();
+            if (customerId == null) {
+                throw new IllegalArgumentException("Google müşteri ID'si (platformPageId) eksik.");
+            }
+
+            String url = "https://googleads.googleapis.com/v14/customers/" + customerId + "/googleAds:searchStream";
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setBearerAuth(accessToken);
+            headers.setContentType(MediaType.APPLICATION_JSON);
+
+            Map<String, String> query = new HashMap<>();
+            query.put("query",
+                    "SELECT "
+                            + "lead_form_submission_data.resource_name, "
+                            + "lead_form_submission_data.lead_form_submission_fields, "
+                            + "lead_form_submission_data.asset, "
+                            + "lead_form_submission_data.campaign, "
+                            + "lead_form_submission_data.ad_group_ad, "
+                            + "lead_form_submission_data.submission_date_time "
+                            + "FROM lead_form_submission_data "
+                            + "WHERE segments.date DURING LAST_7_DAYS");
+
+            HttpEntity<Map<String, String>> entity = new HttpEntity<>(query, headers);
+
+            ResponseEntity<List> response = restTemplate.exchange(url, HttpMethod.POST, entity, List.class);
+            List<Map<String, Object>> rows = response.getBody();
+
+            if (rows == null) {
+                logger.info("Google API boş döndü.");
+                runLog.setTotalFetched(0);
+                return Collections.emptyList();
+            }
+
+            for (Map<String, Object> row : rows) {
+                Map leadForm = (Map) row.get("leadFormSubmissionData");
+                if (leadForm == null) continue;
+
+                String resourceName = asString(leadForm.get("resourceName"));
+                String campaign = asString(leadForm.get("campaign"));
+                String submissionTime = asString(leadForm.get("submissionDateTime"));
+                Instant platformCreatedAt = parseInstant(submissionTime);
+                String leadId = resourceName;
+
+                Optional<Lead> existingOpt = leadRepository.findByOrganizationIdAndPlatformAndSourceLeadId(
+                        organizationId, IntegrationPlatform.GOOGLE, leadId);
+
+                Lead lead;
+                if (existingOpt.isPresent()) {
+                    lead = existingOpt.get();
+                    logger.info("Güncelleniyor: {}", leadId);
+                    updatedCount++;
+                } else {
+                    lead = new Lead();
+                    lead.setOrganizationId(organizationId);
+                    lead.setPlatform(IntegrationPlatform.GOOGLE);
+                    lead.setSourceLeadId(leadId);
+                    lead.setStatus(LeadStatus.NEW);
+                    createdCount++;
+                }
+
+                List<Map<String, Object>> fields = (List<Map<String, Object>>) leadForm.get("leadFormSubmissionFields");
+                Map<String, String> extraFields = new LinkedHashMap<>();
+                for (Map<String, Object> f : fields) {
+                    String fieldName = asString(f.get("fieldType"));
+                    String fieldValue = asString(f.get("fieldValue"));
+                    if (fieldName != null && fieldValue != null) {
+                        switch (fieldName.toLowerCase()) {
+                            case "full_name": case "name": lead.setName(fieldValue); break;
+                            case "email": lead.setEmail(fieldValue); break;
+                            case "phone_number": lead.setPhone(fieldValue); break;
+                            default: extraFields.put(fieldName, fieldValue);
+                        }
+                    }
+                }
+
+                if (!extraFields.isEmpty()) {
+                    try {
+                        lead.setExtraFieldsJson(objectMapper.writeValueAsString(extraFields));
+                    } catch (Exception ignored) {}
+                }
+
+                lead.setNotes("Google Lead Form'dan geldi: " + campaign);
+                lead.setPlatformCreatedAt(platformCreatedAt);
+                leadRepository.save(lead);
+                result.add(lead);
+            }
+
+            runLog.setTotalFetched(result.size());
+            runLog.setNewCreated(createdCount);
+            runLog.setUpdated(updatedCount);
+            logger.info("Google entegrasyonu tamamlandı: fetched={}, created={}, updated={}",
+                    result.size(), createdCount, updatedCount);
+
+        } catch (Exception e) {
+            logger.error("Google Lead çekme hatası: {}", e.getMessage(), e);
+            runLog.setErrorMessage(e.getMessage());
+        } finally {
+            runLog.setFinishedAt(Instant.now());
+            integrationLogRepository.save(runLog);
         }
 
-        // TODO: Buraya gerçek Google Ads API çağrıları implemente edilmelidir.
-        // Bu kısım Google Ads API'nin detaylı kullanımına göre yazılmalıdır.
-        // Müşteri ID'nizi ve sorgunuzu doğru şekilde ayarlamanız gerekir.
-        // config.getPlatformPageId() Google müşteri ID'si olarak kullanılabilir.
-        logger.warn("Google Lead çekme işlemi yer tutucudur. Gerçek Google Ads API entegrasyonu gereklidir.");
-        return Collections.emptyList(); // Yer tutucu için boş liste döndür
+        return result;
     }
+
 
     /**
      * Facebook Lead Ads API'den lead'leri çeker.
      * Bu metod, Facebook Graph API ile tam olarak implemente edilmelidir.
      */
+    @Transactional
     public List<Lead> fetchFacebookLeads(UUID organizationId) {
-        IntegrationConfig config = integrationConfigRepository
-                .findByOrganizationIdAndPlatform(organizationId, IntegrationPlatform.FACEBOOK)
-                .orElseThrow(() -> new ResourceNotFoundException("Facebook entegrasyonu yok."));
+        IntegrationLog runLog = IntegrationLog.builder()
+                .organizationId(organizationId)
+                .platform(IntegrationPlatform.FACEBOOK)
+                .startedAt(Instant.now())
+                .build();
 
-        String pageId = config.getPlatformPageId();
-        if (pageId == null || pageId.isBlank()) {
-            throw new IllegalArgumentException("Facebook Sayfa ID eksik.");
-        }
-
-
-        String userAccessToken = encryptionService.decrypt(config.getAccessToken());
-        if (userAccessToken == null) throw new SecurityException("User access token çözülemedi.");
-
-        // Sayfa access token
-        String pageAccessToken = null;
-        try {
-            Map pageResp = restTemplate.getForObject(
-                    "https://graph.facebook.com/v18.0/{pageId}?fields=access_token&access_token={uat}",
-                    Map.class, pageId, userAccessToken
-            );
-            if (pageResp != null) pageAccessToken = (String) pageResp.get("access_token");
-        } catch (Exception ignored) {}
-        if (pageAccessToken == null) throw new RuntimeException("Page access token alınamadı.");
-
-        final String LEAD_FIELDS = String.join(",",
-                "id",
-                "created_time",
-                "ad_id","ad_name",
-                "adset_id","adset_name",
-                "campaign_id","campaign_name",
-                "form_id",
-                "is_organic",
-                "field_data",
-                "custom_disclaimer_responses"
-        );
-
+        int createdCount = 0;
+        int updatedCount = 0;
         List<Lead> result = new ArrayList<>();
 
-        // 1) Formlar
-        String formsUrl = "https://graph.facebook.com/v18.0/" + pageId
-                + "/leadgen_forms?fields=id,name&limit=50&access_token=" + pageAccessToken;
+        try {
+            IntegrationConfig config = integrationConfigRepository
+                    .findByOrganizationIdAndPlatform(organizationId, IntegrationPlatform.FACEBOOK)
+                    .orElseThrow(() -> new ResourceNotFoundException("Facebook entegrasyonu yok."));
 
-        while (formsUrl != null) {
-            ResponseEntity<Map> formsResponse = restTemplate.exchange(formsUrl, HttpMethod.GET, null, Map.class);
-            Map body = formsResponse.getBody();
-            List<Map<String,Object>> forms = body != null ? (List<Map<String,Object>>) body.get("data") : null;
-
-            if (forms != null) {
-                for (Map<String,Object> form : forms) {
-                    String formId = (String) form.get("id");
-                    String formName = (String) form.get("name");
-                    if (formId == null) continue;
-
-                    // 2) Lead’ler (sayfalama)
-                    String leadsUrl = "https://graph.facebook.com/v18.0/" + formId
-                            + "/leads?fields=" + LEAD_FIELDS + "&limit=100&access_token=" + pageAccessToken;
-
-                    while (leadsUrl != null) {
-                        ResponseEntity<Map> leadsResp = restTemplate.exchange(leadsUrl, HttpMethod.GET, null, Map.class);
-                        Map lbody = leadsResp.getBody();
-                        List<Map<String,Object>> leads = lbody != null ? (List<Map<String,Object>>) lbody.get("data") : null;
-
-                        if (leads != null) {
-                            for (Map<String,Object> fbLead : leads) {
-                                // --- Idempotency
-                                String fbLeadId = asString(fbLead.get("id"));
-                                if (fbLeadId != null && leadRepository.existsByOrganizationIdAndPlatformAndSourceLeadId(
-                                        organizationId, IntegrationPlatform.FACEBOOK, fbLeadId)) {
-                                    continue;
-                                }
-
-                                // --- Temel alanlar
-                                String createdTimeStr = asString(fbLead.get("created_time"));
-                                Instant platformCreatedAt = parseInstant(createdTimeStr);
-
-                                String adId    = asString(fbLead.get("ad_id"));
-                                String adName  = asString(fbLead.get("ad_name"));
-                                String adsetId = asString(fbLead.get("adset_id"));
-                                String adsetNm = asString(fbLead.get("adset_name"));
-                                String campId  = asString(fbLead.get("campaign_id"));
-                                String campNm  = asString(fbLead.get("campaign_name"));
-                                Boolean organic = asBoolean(fbLead.get("is_organic"));
-
-                                // --- field_data: name/email/phone + kalanları extras’a
-                                String name = null, email = null, phone = null, firstName = null, lastName = null;
-                                Map<String,Object> extras = new LinkedHashMap<>();
-
-                                Object fdObj = fbLead.get("field_data");
-                                if (fdObj instanceof List) {
-                                    List<Map<String,Object>> fieldData = (List<Map<String,Object>>) fdObj;
-                                    for (Map<String,Object> f : fieldData) {
-                                        String fname = asString(f.get("name"));
-                                        String fval  = firstValue(f.get("values"));
-                                        if (fname == null) continue;
-
-                                        switch (fname.toLowerCase()) {
-                                            case "full_name":
-                                            case "name":        if (isBlank(name)) name = fval; break;
-                                            case "first_name":  firstName = fval; break;
-                                            case "last_name":   lastName  = fval; break;
-                                            case "email":       email     = fval; break;
-                                            case "phone":
-                                            case "phone_number":phone     = fval; break;
-                                            case "language":    /* dil alanın varsa */ ; break;
-                                            default:
-                                                // custom alanları kaçırma
-                                                if (fval != null) extras.put(fname, fval);
-                                        }
-                                    }
-                                }
-                                if (isBlank(name) && (!isBlank(firstName) || !isBlank(lastName))) {
-                                    name = (safe(firstName) + " " + safe(lastName)).trim();
-                                }
-                                if (isBlank(name)) {
-                                    name = !isBlank(email) ? email :
-                                            !isBlank(phone) ? phone :
-                                                    "Facebook Lead" + (isBlank(formName) ? "" : " - " + formName)
-                                                            + (fbLeadId != null ? " (" + fbLeadId + ")" : "");
-                                }
-
-                                // --- disclaimer_responses JSON
-                                String disclaimerJson = null;
-                                try {
-                                    Object dr = fbLead.get("custom_disclaimer_responses");
-                                    if (dr != null) disclaimerJson = objectMapper.writeValueAsString(dr);
-                                } catch (Exception ignored) {}
-
-                                // --- extras JSON
-                                String extrasJson = null;
-                                try {
-                                    if (!extras.isEmpty()) extrasJson = objectMapper.writeValueAsString(extras);
-                                } catch (Exception ignored) {}
-                                String langCode = detectLanguageFromText(formName);
-
-                                // --- Persist
-                                Lead entity = new Lead();
-                                if (langCode != null) {
-                                    entity.setLanguage(langCode);
-                                }
-                                entity.setOrganizationId(organizationId);
-                                entity.setPlatform(IntegrationPlatform.FACEBOOK);
-                                entity.setSourceLeadId(fbLeadId);
-                                entity.setName(name);
-                                entity.setEmail(email);
-                                entity.setPhone(phone);
-                                entity.setNotes("Facebook Lead formdan: " + safe(formName) + " - Form ID: " + formId);
-                                entity.setStatus(LeadStatus.NEW);
-
-                                // geniş alanlar (entity’nde varsa)
-                                entity.setPlatformCreatedAt(platformCreatedAt);
-                                entity.setPageId(pageId);
-                                entity.setFormId(formId);
-                                entity.setFormName(formName);
-                                entity.setOrganic(organic);
-                                entity.setAdId(adId);
-                                entity.setAdName(adName);
-                                entity.setAdsetId(adsetId);
-                                entity.setAdsetName(adsetNm);
-                                entity.setFbCampaignId(campId);
-                                entity.setFbCampaignName(campNm);
-                                entity.setDisclaimerResponsesJson(disclaimerJson);
-                                entity.setExtraFieldsJson(extrasJson);
-
-                                leadRepository.save(entity);
-                                result.add(entity);
-                            }
-                        }
-
-                        // leads paging
-                        leadsUrl = nextUrl(lbody);
-                    }
-                }
+            String pageId = config.getPlatformPageId();
+            if (pageId == null || pageId.isBlank()) {
+                throw new IllegalArgumentException("Facebook Sayfa ID eksik.");
             }
 
-            // forms paging
-            formsUrl = nextUrl(body);
+            String userAccessToken = encryptionService.decrypt(config.getAccessToken());
+            if (userAccessToken == null) throw new SecurityException("User access token çözülemedi.");
+
+            // Sayfa access token
+            String pageAccessToken = null;
+            try {
+                Map pageResp = restTemplate.getForObject(
+                        "https://graph.facebook.com/v18.0/{pageId}?fields=access_token&access_token={uat}",
+                        Map.class, pageId, userAccessToken
+                );
+                if (pageResp != null) pageAccessToken = (String) pageResp.get("access_token");
+            } catch (Exception ignored) {}
+            if (pageAccessToken == null) throw new RuntimeException("Page access token alınamadı.");
+
+            final String LEAD_FIELDS = String.join(",",
+                    "id",
+                    "created_time",
+                    "ad_id","ad_name",
+                    "adset_id","adset_name",
+                    "campaign_id","campaign_name",
+                    "form_id",
+                    "is_organic",
+                    "field_data",
+                    "custom_disclaimer_responses"
+            );
+
+            // 1) Formlar
+            String formsUrl = "https://graph.facebook.com/v18.0/" + pageId
+                    + "/leadgen_forms?fields=id,name&limit=50&access_token=" + pageAccessToken;
+
+            while (formsUrl != null) {
+                ResponseEntity<Map> formsResponse = restTemplate.exchange(formsUrl, HttpMethod.GET, null, Map.class);
+                Map body = formsResponse.getBody();
+                List<Map<String,Object>> forms = body != null ? (List<Map<String,Object>>) body.get("data") : null;
+
+                if (forms != null) {
+                    for (Map<String,Object> form : forms) {
+                        String formId = (String) form.get("id");
+                        String formName = (String) form.get("name");
+                        if (formId == null) continue;
+
+                        // 2) Lead’ler (sayfalama)
+                        String leadsUrl = "https://graph.facebook.com/v18.0/" + formId
+                                + "/leads?fields=" + LEAD_FIELDS + "&limit=100&access_token=" + pageAccessToken;
+
+                        while (leadsUrl != null) {
+                            ResponseEntity<Map> leadsResp = restTemplate.exchange(leadsUrl, HttpMethod.GET, null, Map.class);
+                            Map lbody = leadsResp.getBody();
+                            List<Map<String,Object>> leads = lbody != null ? (List<Map<String,Object>>) lbody.get("data") : null;
+
+                            if (leads != null) {
+                                for (Map<String,Object> fbLead : leads) {
+                                    String fbLeadId = asString(fbLead.get("id"));
+                                    if (fbLeadId == null) continue;
+
+                                    Optional<Lead> existingOpt = leadRepository.findByOrganizationIdAndPlatformAndSourceLeadId(
+                                            organizationId, IntegrationPlatform.FACEBOOK, fbLeadId);
+
+                                    if (existingOpt.isPresent()) {
+                                        Lead existing = existingOpt.get();
+                                        updateLeadFields(existing, fbLead, formName, formId, pageId);
+                                        leadRepository.save(existing);
+                                        logger.info("Updated existing Facebook lead {}", fbLeadId);
+                                        result.add(existing);
+                                        updatedCount++;
+                                        continue;
+                                    }
+
+                                    Lead entity = new Lead();
+                                    entity.setOrganizationId(organizationId);
+                                    entity.setPlatform(IntegrationPlatform.FACEBOOK);
+                                    entity.setSourceLeadId(fbLeadId);
+
+                                    updateLeadFields(entity, fbLead, formName, formId, pageId);
+
+                                    leadRepository.save(entity);
+                                    result.add(entity);
+                                    createdCount++;
+                                    logger.info("Created new Facebook lead {}", fbLeadId);
+                                }
+                            }
+
+                            leadsUrl = nextUrl(lbody);
+                        }
+                    }
+                }
+
+                formsUrl = nextUrl(body);
+            }
+
+            runLog.setTotalFetched(result.size());
+            runLog.setNewCreated(createdCount);
+            runLog.setUpdated(updatedCount);
+            logger.info("Facebook entegrasyonu tamamlandı: fetched={}, created={}, updated={}",
+                    result.size(), createdCount, updatedCount);
+        } catch (Exception e) {
+            logger.error("Facebook entegrasyonu hata verdi: {}", e.getMessage(), e);
+            runLog.setErrorMessage(e.getMessage());
+        } finally {
+            runLog.setFinishedAt(Instant.now());
+            integrationLogRepository.save(runLog);
         }
 
         return result;
     }
+
 
 
     /**
@@ -600,4 +659,57 @@ public class IntegrationService {
         }
         logger.info("Zamanlanmış lead senkronizasyonu tamamlandı.");
     }
+
+    private void updateLeadFields(Lead lead, Map<String,Object> fbLead, String formName, String formId, String pageId) {
+        String adId    = asString(fbLead.get("ad_id"));
+        String adName  = asString(fbLead.get("ad_name"));
+        String adsetId = asString(fbLead.get("adset_id"));
+        String adsetNm = asString(fbLead.get("adset_name"));
+        String campId  = asString(fbLead.get("campaign_id"));
+        String campNm  = asString(fbLead.get("campaign_name"));
+        Boolean organic = asBoolean(fbLead.get("is_organic"));
+
+        String createdTimeStr = asString(fbLead.get("created_time"));
+        Instant platformCreatedAt = parseInstant(createdTimeStr);
+
+        // field_data parse
+        String name = null, email = null, phone = null;
+        Object fdObj = fbLead.get("field_data");
+        if (fdObj instanceof List) {
+            for (Map<String,Object> f : (List<Map<String,Object>>) fdObj) {
+                String fname = asString(f.get("name"));
+                String fval  = firstValue(f.get("values"));
+                if (fname == null) continue;
+                switch (fname.toLowerCase()) {
+                    case "full_name":
+                    case "name":        name  = fval; break;
+                    case "email":       email = fval; break;
+                    case "phone":
+                    case "phone_number":phone = fval; break;
+                }
+            }
+        }
+
+        if (name != null) lead.setName(name);
+        if (email != null) lead.setEmail(email);
+        if (phone != null) lead.setPhone(phone);
+
+        lead.setFormId(formId);
+        lead.setFormName(formName);
+        lead.setPageId(pageId);
+        lead.setAdId(adId);
+        lead.setAdName(adName);
+        lead.setAdsetId(adsetId);
+        lead.setAdsetName(adsetNm);
+        lead.setFbCampaignId(campId);
+        lead.setFbCampaignName(campNm);
+        lead.setOrganic(organic);
+        lead.setPlatformCreatedAt(platformCreatedAt);
+
+        // Status sadece ilk kayıt sırasında NEW atanmalı, update sırasında dokunma
+        if (lead.getStatus() == null) {
+            lead.setStatus(LeadStatus.NEW);
+        }
+    }
+
 }

@@ -7,7 +7,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface LeadRepository extends JpaRepository<Lead, UUID> {
@@ -31,5 +33,14 @@ public interface LeadRepository extends JpaRepository<Lead, UUID> {
 
     boolean existsByOrganizationIdAndPlatformAndSourceLeadId(
             UUID organizationId, IntegrationPlatform platform, String sourceLeadId);
+
+    Optional<Lead> findByOrganizationIdAndPlatformAndSourceLeadId(
+            UUID organizationId,
+            IntegrationPlatform platform,
+            String sourceLeadId
+    );
+
+    List<Lead> findAllByStatusAndUpdatedAtBefore(LeadStatus status, Instant updatedAt);
+
 
 }
