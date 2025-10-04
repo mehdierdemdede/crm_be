@@ -1,0 +1,20 @@
+package com.leadsyncpro.model;
+
+public enum AestheticProcedure {
+    BURUN_ESTETIGI,
+    GOZ_KAPAGI_ESTETIGI,
+    YUZ_GERME,
+    CENE_ESTETIGI,
+    LIPOSUCTION,
+    KARIN_GERME,
+    POPO_ESTETIGI,
+    MEME_BUYUTME,
+    MEME_KUCULTME,
+    MEME_DIKLESTIRME,
+    MOMMY_MAKEOVER,
+    BODY_LIFT_360,
+    OTOPLASTI,
+    BOYUN_GERME,
+    JINEKOMASTI
+}
+

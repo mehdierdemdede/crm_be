@@ -1,11 +1,13 @@
 package com.leadsyncpro.dto;
 
 import com.leadsyncpro.model.Role;
+import com.leadsyncpro.model.SupportedLanguages;
 import lombok.Data;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
+import java.util.Set;
 import java.util.UUID;
 
 @Data
@@ -22,4 +24,9 @@ public class UserCreateRequest {
     private String lastName;
     @NotNull
     private Role role;
+    
+    private Set<SupportedLanguages> supportedLanguages;
+    private Integer dailyCapacity;
+    private boolean active = true;
+    private boolean autoAssignEnabled = false;
 }

@@ -13,10 +13,12 @@ import jakarta.persistence.Column;
 import jakarta.persistence.UniqueConstraint;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.EnumType;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import java.time.Instant;
 import java.util.UUID;
+import java.util.Set;
 
 @Entity
 @Table(name = "users", uniqueConstraints = {
@@ -53,6 +55,17 @@ public class User {
 
     @Column(name = "is_active")
     private boolean isActive = true;
+
+    @ElementCollection(targetClass = SupportedLanguages.class)
+    @Enumerated(EnumType.STRING)
+    @Column(name = "supported_languages")
+    private Set<SupportedLanguages> supportedLanguages;
+
+    @Column(name = "daily_capacity")
+    private Integer dailyCapacity;
+
+    @Column(name = "auto_assign_enabled")
+    private boolean autoAssignEnabled = false;
 
     @Column(name = "created_at", updatable = false)
     private Instant createdAt;
