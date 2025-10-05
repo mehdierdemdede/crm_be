@@ -1,14 +1,13 @@
 package com.leadsyncpro.controller;
 
-import com.leadsyncpro.dto.BulkAssignRequest;
-import com.leadsyncpro.dto.LeadCreateRequest;
-import com.leadsyncpro.dto.LeadStatsResponse;
-import com.leadsyncpro.dto.LeadUpdateRequest;
+import com.leadsyncpro.dto.*;
 import com.leadsyncpro.model.Lead;
+import com.leadsyncpro.model.LeadActivityLog;
 import com.leadsyncpro.model.LeadStatus;
 import com.leadsyncpro.model.LeadStatusLog;
 import com.leadsyncpro.repository.LeadStatusLogRepository;
 import com.leadsyncpro.security.UserPrincipal;
+import com.leadsyncpro.service.LeadActivityLogService;
 import com.leadsyncpro.service.LeadService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -27,10 +26,12 @@ public class LeadController {
 
     private final LeadService leadService;
     private final LeadStatusLogRepository leadStatusLogRepository;
+    private final LeadActivityLogService leadActivityLogService;
 
-    public LeadController(LeadService leadService, LeadStatusLogRepository leadStatusLogRepository) {
+    public LeadController(LeadService leadService, LeadStatusLogRepository leadStatusLogRepository, LeadActivityLogService leadActivityLogService) {
         this.leadService = leadService;
         this.leadStatusLogRepository = leadStatusLogRepository;
+        this.leadActivityLogService = leadActivityLogService;
     }
 
     // ───────────────────────────────
@@ -174,6 +175,24 @@ public class LeadController {
     ) {
         LeadStatsResponse res = leadService.getDashboardStats(currentUser.getOrganizationId(), start, end);
         return ResponseEntity.ok(res);
+    }
+
+    // 🔹 Lead'e yeni log ekleme
+    @PostMapping("/{leadId}/logs")
+    @PreAuthorize("hasAnyAuthority('USER','ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<LeadActivityLog> addLeadLog(@PathVariable UUID leadId,
+                                                      @RequestBody LeadLogRequest req,
+                                                      @AuthenticationPrincipal UserPrincipal currentUser) {
+        LeadActivityLog log = leadActivityLogService.addLog(leadId, currentUser.getId(), req);
+        return ResponseEntity.ok(log);
+    }
+
+    // 🔹 Lead loglarını listeleme
+    @GetMapping("/{leadId}/logs")
+    @PreAuthorize("hasAnyAuthority('USER','ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<List<LeadActivityLog>> getLeadLogs(@PathVariable UUID leadId) {
+        List<LeadActivityLog> logs = leadActivityLogService.getLogs(leadId);
+        return ResponseEntity.ok(logs);
     }
 
 }
