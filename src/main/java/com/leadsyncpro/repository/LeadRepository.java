@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -69,6 +70,18 @@ public interface LeadRepository extends JpaRepository<Lead, UUID> {
                                           @Param("end") Instant end);
 
     List<Lead> findByOrganizationIdAndCreatedAtBetween(UUID organizationId, Instant start, Instant end);
+
+    @Query("""
+    SELECT l.assignedToUser.id, COUNT(l)
+    FROM Lead l
+    WHERE l.organizationId = :orgId
+      AND l.assignedToUser IS NOT NULL
+      AND l.createdAt >= :dayStart
+    GROUP BY l.assignedToUser.id
+""")
+    Map<UUID, Long> countTodayAssignmentsByUsers(@Param("orgId") UUID orgId,
+                                                 @Param("dayStart") Instant dayStart);
+
 
 
 

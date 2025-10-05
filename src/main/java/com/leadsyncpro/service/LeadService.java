@@ -35,15 +35,17 @@ public class LeadService {
     private final CampaignRepository campaignRepository;
     private final UserRepository userRepository;
     private final LeadStatusLogRepository leadStatusLogRepository;
+    private final AutoAssignService autoAssignService;
 
     public LeadService(LeadRepository leadRepository,
                        CampaignRepository campaignRepository,
                        UserRepository userRepository,
-                       LeadStatusLogRepository leadStatusLogRepository) {
+                       LeadStatusLogRepository leadStatusLogRepository, AutoAssignService autoAssignService) {
         this.leadRepository = leadRepository;
         this.campaignRepository = campaignRepository;
         this.userRepository = userRepository;
         this.leadStatusLogRepository = leadStatusLogRepository;
+        this.autoAssignService = autoAssignService;
     }
 
     // ───────────────────────────────
@@ -75,6 +77,7 @@ public class LeadService {
         }
 
         Lead saved = leadRepository.save(lead);
+        autoAssignService.assignLeadIfPossible(saved);
         logger.info("Yeni lead oluşturuldu: {} ({})", saved.getId(), saved.getName());
         return saved;
     }

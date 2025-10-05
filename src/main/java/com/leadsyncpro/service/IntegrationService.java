@@ -43,6 +43,7 @@ public class IntegrationService {
     private final IntegrationLogRepository integrationLogRepository;
     private final CampaignRepository campaignRepository;
     private final ObjectMapper objectMapper;
+    private final AutoAssignService autoAssignService;
 
 
     @Value("${app.encryption.key}")
@@ -95,10 +96,11 @@ public class IntegrationService {
                               ClientRegistrationRepository clientRegistrationRepository,
                               LeadRepository leadRepository,
                               CampaignRepository campaignRepository,
-                              IntegrationLogRepository integrationLogRepository) {
+                              IntegrationLogRepository integrationLogRepository, AutoAssignService autoAssignService) {
         this.integrationConfigRepository = integrationConfigRepository;
         this.encryptionService = encryptionService;
         this.clientRegistrationRepository = clientRegistrationRepository;
+        this.autoAssignService = autoAssignService;
         this.restTemplate = new RestTemplate();
         this.leadRepository = leadRepository;
         this.campaignRepository = campaignRepository;
@@ -473,6 +475,7 @@ public class IntegrationService {
                 lead.setNotes("Google Lead Form'dan geldi: " + campaign);
                 lead.setPlatformCreatedAt(platformCreatedAt);
                 leadRepository.save(lead);
+                autoAssignService.assignLeadIfPossible(lead);
                 result.add(lead);
             }
 
@@ -582,6 +585,7 @@ public class IntegrationService {
                                         Lead existing = existingOpt.get();
                                         updateLeadFields(existing, fbLead, formName, formId, pageId);
                                         leadRepository.save(existing);
+                                        autoAssignService.assignLeadIfPossible(existing);
                                         logger.info("Updated existing Facebook lead {}", fbLeadId);
                                         result.add(existing);
                                         updatedCount++;
@@ -596,6 +600,7 @@ public class IntegrationService {
                                     updateLeadFields(entity, fbLead, formName, formId, pageId);
 
                                     leadRepository.save(entity);
+                                    autoAssignService.assignLeadIfPossible(entity);
                                     result.add(entity);
                                     createdCount++;
                                     logger.info("Created new Facebook lead {}", fbLeadId);
