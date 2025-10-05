@@ -47,5 +47,47 @@ public class MailService {
 
         mailSender.send(msg);
     }
+
+    @Retryable(value = MailException.class, maxAttempts = 3, backoff = @Backoff(delay = 2000))
+    public void sendLeadAssignedEmail(String toEmail, String firstName, String leadName,
+                                      String campaignName, String language, String status, String leadId) {
+
+        String link = frontendBase + "/leads/" + leadId;
+
+        String subject = "Yeni Lead Atandı: " + leadName;
+
+        String body = String.format("""
+        Merhaba %s,
+
+        Size yeni bir lead atandı:
+
+        Ad: %s
+        Kampanya: %s
+        Dil: %s
+        Durum: %s
+
+        Lead detaylarına buradan ulaşabilirsiniz:
+        %s
+
+        Başarılar,
+        CRM Pro
+        """,
+                firstName == null ? "" : firstName,
+                leadName,
+                campaignName != null ? campaignName : "-",
+                language != null ? language : "-",
+                status != null ? status : "-",
+                link
+        );
+
+        SimpleMailMessage msg = new SimpleMailMessage();
+        msg.setFrom(from);
+        msg.setTo(toEmail);
+        msg.setSubject(subject);
+        msg.setText(body);
+
+        mailSender.send(msg);
+    }
+
 }
 

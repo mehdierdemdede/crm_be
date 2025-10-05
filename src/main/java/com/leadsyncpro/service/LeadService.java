@@ -36,16 +36,18 @@ public class LeadService {
     private final UserRepository userRepository;
     private final LeadStatusLogRepository leadStatusLogRepository;
     private final AutoAssignService autoAssignService;
+    private final MailService mailService;
 
     public LeadService(LeadRepository leadRepository,
                        CampaignRepository campaignRepository,
                        UserRepository userRepository,
-                       LeadStatusLogRepository leadStatusLogRepository, AutoAssignService autoAssignService) {
+                       LeadStatusLogRepository leadStatusLogRepository, AutoAssignService autoAssignService, MailService mailService) {
         this.leadRepository = leadRepository;
         this.campaignRepository = campaignRepository;
         this.userRepository = userRepository;
         this.leadStatusLogRepository = leadStatusLogRepository;
         this.autoAssignService = autoAssignService;
+        this.mailService = mailService;
     }
 
     // ───────────────────────────────
@@ -74,6 +76,21 @@ public class LeadService {
                     .filter(u -> u.getOrganizationId().equals(organizationId))
                     .orElseThrow(() -> new ResourceNotFoundException("Assigned user not found or access denied."));
             lead.setAssignedToUser(assignedUser);
+
+            // ✅ E-posta bildirimi
+            try {
+                mailService.sendLeadAssignedEmail(
+                        assignedUser.getEmail(),
+                        assignedUser.getFirstName(),
+                        lead.getName(),
+                        lead.getCampaign() != null ? lead.getCampaign().getName() : null,
+                        lead.getLanguage(),
+                        lead.getStatus().name(),
+                        lead.getId().toString()
+                );
+            } catch (Exception e) {
+                logger.warn("Lead atama bildirimi gönderilemedi: {}", e.getMessage());
+            }
         }
 
         Lead saved = leadRepository.save(lead);
