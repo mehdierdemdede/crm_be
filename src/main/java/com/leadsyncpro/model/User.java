@@ -1,33 +1,29 @@
 package com.leadsyncpro.model;
 
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import lombok.AllArgsConstructor;
+import lombok.*;
 import org.hibernate.annotations.GenericGenerator;
-
-import jakarta.persistence.Entity;
-import jakarta.persistence.Table;
-import jakarta.persistence.Id;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.Column;
-import jakarta.persistence.UniqueConstraint;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.ElementCollection;
-import jakarta.persistence.PrePersist;
-import jakarta.persistence.PreUpdate;
+import jakarta.persistence.*;
 import java.time.Instant;
 import java.util.UUID;
 import java.util.Set;
 
 @Entity
-@Table(name = "users", uniqueConstraints = {
-        @UniqueConstraint(columnNames = {"organization_id", "email"})
-})
+@Table(
+        name = "users",
+        uniqueConstraints = {
+                @UniqueConstraint(columnNames = {"organization_id", "email"})
+        },
+        indexes = {
+                @Index(name = "idx_user_org_role", columnList = "organization_id, role"),
+                @Index(name = "idx_user_org_active", columnList = "organization_id, is_active")
+        }
+)
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@Builder
 public class User {
+
     @Id
     @GeneratedValue(generator = "UUID")
     @GenericGenerator(name = "UUID", strategy = "org.hibernate.id.UUIDGenerator")
@@ -35,7 +31,7 @@ public class User {
     private UUID id;
 
     @Column(name = "organization_id", nullable = false)
-    private UUID organizationId; // Discriminator column
+    private UUID organizationId;
 
     @Column(nullable = false)
     private String email;
@@ -49,9 +45,9 @@ public class User {
     @Column(name = "last_name")
     private String lastName;
 
-    @Enumerated(EnumType.STRING) // Store enum as string in DB
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private Role role; // Enum for roles: SUPER_ADMIN, ADMIN, USER
+    private Role role;
 
     @Column(name = "is_active")
     private boolean isActive = true;

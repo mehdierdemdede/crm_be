@@ -1,12 +1,9 @@
 package com.leadsyncpro.model;
 
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
+import jakarta.persistence.*;
+import lombok.*;
 import org.hibernate.annotations.GenericGenerator;
 
-import jakarta.persistence.*;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -14,8 +11,8 @@ import java.util.UUID;
 @Table(
         name = "integration_logs",
         indexes = {
-                @Index(name = "idx_integration_logs_org_platform", columnList = "organization_id, platform"),
-                @Index(name = "idx_integration_logs_started", columnList = "started_at")
+                @Index(name = "idx_intlog_org_platform", columnList = "organization_id, platform"),
+                @Index(name = "idx_intlog_started", columnList = "started_at")
         }
 )
 @Data
@@ -34,7 +31,7 @@ public class IntegrationLog {
     private UUID organizationId;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "platform", nullable = false)
+    @Column(nullable = false, length = 50)
     private IntegrationPlatform platform;
 
     @Column(name = "total_fetched")
@@ -46,7 +43,7 @@ public class IntegrationLog {
     @Column(name = "updated")
     private int updated;
 
-    @Column(name = "error_message", length = 2000)
+    @Column(name = "error_message", columnDefinition = "TEXT")
     private String errorMessage;
 
     @Column(name = "started_at", nullable = false)
@@ -57,8 +54,7 @@ public class IntegrationLog {
 
     @PrePersist
     protected void onCreate() {
-        if (startedAt == null) {
-            startedAt = Instant.now();
-        }
+        if (this.startedAt == null)
+            this.startedAt = Instant.now();
     }
 }

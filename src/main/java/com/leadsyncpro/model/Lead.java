@@ -1,10 +1,7 @@
 package com.leadsyncpro.model;
 
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import lombok.AllArgsConstructor;
+import lombok.*;
 import org.hibernate.annotations.GenericGenerator;
-
 import jakarta.persistence.*;
 import java.time.Instant;
 import java.util.UUID;
@@ -13,13 +10,20 @@ import java.util.UUID;
 @Table(
         name = "leads",
         indexes = {
-                @Index(name = "idx_leads_org_platform_sourceid", columnList = "organization_id,platform,source_lead_id")
+                // 🔹 Entegrasyon duplicate kontrolü (Facebook/Google)
+                @Index(name = "idx_leads_org_platform_sourceid", columnList = "organization_id, platform, source_lead_id"),
+                // 🔹 Organizasyon + status sorguları (dashboard / filtre)
+                @Index(name = "idx_leads_org_status", columnList = "organization_id, status"),
+                // 🔹 Kullanıcı bazlı lead listesi (assign ve kullanıcı dashboard)
+                @Index(name = "idx_leads_assigned_user", columnList = "assigned_to_user_id")
         }
 )
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@Builder
 public class Lead {
+
     @Id
     @GeneratedValue(generator = "UUID")
     @GenericGenerator(name = "UUID", strategy = "org.hibernate.id.UUIDGenerator")
@@ -44,7 +48,8 @@ public class Lead {
     @Column(columnDefinition = "TEXT")
     private String notes;
 
-    @ManyToOne
+    // 🔹 İlişkilendirilmiş kampanya (nullable olabilir)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "campaign_id")
     private Campaign campaign;
 
@@ -52,7 +57,8 @@ public class Lead {
     @Column(nullable = false, length = 50)
     private LeadStatus status;
 
-    @ManyToOne
+    // 🔹 Lead hangi kullanıcıya atanmış
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "assigned_to_user_id")
     private User assignedToUser;
 
@@ -62,14 +68,14 @@ public class Lead {
     @Column(name = "updated_at")
     private Instant updatedAt;
 
-    // ------------------- Facebook Graph API ek alanlar -------------------
+    // ------------------- Facebook / Google API alanları -------------------
 
     @Enumerated(EnumType.STRING)
     @Column(name = "platform", length = 50, nullable = false)
     private IntegrationPlatform platform; // FACEBOOK | GOOGLE
 
     @Column(name = "source_lead_id", length = 100)
-    private String sourceLeadId; // FB lead id
+    private String sourceLeadId; // platform lead id
 
     @Column(name = "platform_created_at")
     private Instant platformCreatedAt; // created_time
@@ -109,6 +115,8 @@ public class Lead {
 
     @Column(name = "disclaimer_responses_json", columnDefinition = "TEXT")
     private String disclaimerResponsesJson;
+
+    // ------------------- Otomatik timestamp -------------------
 
     @PrePersist
     protected void onCreate() {

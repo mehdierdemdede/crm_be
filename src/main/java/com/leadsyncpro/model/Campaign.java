@@ -1,29 +1,28 @@
 package com.leadsyncpro.model;
 
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import lombok.AllArgsConstructor;
+import lombok.*;
 import org.hibernate.annotations.GenericGenerator;
-
-import jakarta.persistence.Entity;
-import jakarta.persistence.Table;
-import jakarta.persistence.Id;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.Column;
-import jakarta.persistence.UniqueConstraint;
-import jakarta.persistence.PrePersist;
-import jakarta.persistence.PreUpdate;
+import jakarta.persistence.*;
 import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(name = "campaigns", uniqueConstraints = {
-        @UniqueConstraint(columnNames = {"organization_id", "name"})
-})
+@Table(
+        name = "campaigns",
+        uniqueConstraints = {
+                @UniqueConstraint(columnNames = {"organization_id", "name"})
+        },
+        indexes = {
+                @Index(name = "idx_campaign_org_name", columnList = "organization_id, name"),
+                @Index(name = "idx_campaign_created", columnList = "created_at")
+        }
+)
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@Builder
 public class Campaign {
+
     @Id
     @GeneratedValue(generator = "UUID")
     @GenericGenerator(name = "UUID", strategy = "org.hibernate.id.UUIDGenerator")

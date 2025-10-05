@@ -1,32 +1,28 @@
-// src/main/java/com/leadsyncpro/model/IntegrationConfig.java
 package com.leadsyncpro.model;
 
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import lombok.AllArgsConstructor;
+import lombok.*;
 import org.hibernate.annotations.GenericGenerator;
-
-import jakarta.persistence.Entity;
-import jakarta.persistence.Table;
-import jakarta.persistence.Id;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.Column;
-import jakarta.persistence.UniqueConstraint;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.PrePersist;
-import jakarta.persistence.PreUpdate;
+import jakarta.persistence.*;
 import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(name = "integration_configs", uniqueConstraints = {
-        @UniqueConstraint(columnNames = {"organization_id", "platform"})
-})
+@Table(
+        name = "integration_configs",
+        uniqueConstraints = {
+                @UniqueConstraint(columnNames = {"organization_id", "platform"})
+        },
+        indexes = {
+                @Index(name = "idx_intconfig_org_platform", columnList = "organization_id, platform"),
+                @Index(name = "idx_intconfig_last_synced", columnList = "last_synced_at")
+        }
+)
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@Builder
 public class IntegrationConfig {
+
     @Id
     @GeneratedValue(generator = "UUID")
     @GenericGenerator(name = "UUID", strategy = "org.hibernate.id.UUIDGenerator")
@@ -41,10 +37,10 @@ public class IntegrationConfig {
     private IntegrationPlatform platform; // GOOGLE, FACEBOOK
 
     @Column(name = "access_token", nullable = false, columnDefinition = "TEXT")
-    private String accessToken; // Encrypted User Access Token
+    private String accessToken;
 
     @Column(name = "refresh_token", columnDefinition = "TEXT")
-    private String refreshToken; // Encrypted refresh token (if available)
+    private String refreshToken;
 
     @Column(name = "expires_at")
     private Instant expiresAt;
@@ -53,13 +49,13 @@ public class IntegrationConfig {
     private String scope;
 
     @Column(name = "client_id", columnDefinition = "TEXT")
-    private String clientId; // For reference/verification
+    private String clientId;
 
     @Column(name = "client_secret", columnDefinition = "TEXT")
-    private String clientSecret; // Encrypted, for refresh token usage
+    private String clientSecret;
 
     @Column(name = "created_by")
-    private UUID createdBy; // User who initiated this integration
+    private UUID createdBy;
 
     @Column(name = "created_at", updatable = false)
     private Instant createdAt;
@@ -68,11 +64,10 @@ public class IntegrationConfig {
     private Instant updatedAt;
 
     @Column(name = "platform_page_id", columnDefinition = "TEXT")
-    private String platformPageId; // Facebook için seçilen sayfa ID'si
+    private String platformPageId;
 
-    // YENİ EKLENEN KISIM: Sayfa Erişim Token'ı
     @Column(name = "page_access_token", columnDefinition = "TEXT")
-    private String pageAccessToken; // Encrypted Page Access Token
+    private String pageAccessToken;
 
     @Column(name = "last_synced_at")
     private Instant lastSyncedAt;
@@ -82,7 +77,6 @@ public class IntegrationConfig {
 
     @Column(name = "page_token_updated_at")
     private Instant pageTokenUpdatedAt;
-
 
     @PrePersist
     protected void onCreate() {

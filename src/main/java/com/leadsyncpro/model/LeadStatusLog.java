@@ -8,10 +8,13 @@ import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(name = "lead_status_logs", indexes = {
-        @Index(name = "idx_lead_status_log_lead", columnList = "lead_id"),
-        @Index(name = "idx_lead_status_log_created", columnList = "created_at")
-})
+@Table(
+        name = "lead_status_logs",
+        indexes = {
+                @Index(name = "idx_leadstatus_lead", columnList = "lead_id"),
+                @Index(name = "idx_leadstatus_created", columnList = "created_at")
+        }
+)
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -28,21 +31,21 @@ public class LeadStatusLog {
     private UUID leadId;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "old_status")
+    @Column(name = "old_status", nullable = false, length = 50)
     private LeadStatus oldStatus;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "new_status", nullable = false)
+    @Column(name = "new_status", nullable = false, length = 50)
     private LeadStatus newStatus;
 
     @Column(name = "changed_by")
-    private UUID changedBy; // User ID
+    private UUID changedBy;
 
-    @Column(name = "created_at", updatable = false)
+    @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
     @PrePersist
     protected void onCreate() {
-        createdAt = Instant.now();
+        this.createdAt = Instant.now();
     }
 }

@@ -10,6 +10,7 @@ import com.leadsyncpro.repository.LeadStatusLogRepository;
 import com.leadsyncpro.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,24 +20,32 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 
-
 @Service
 public class LeadService {
 
     private static final Logger logger = LoggerFactory.getLogger(LeadService.class);
+
+    @Value("${app.system-user-id:00000000-0000-0000-0000-000000000000}")
+    private UUID SYSTEM_USER_ID;
 
     private final LeadRepository leadRepository;
     private final CampaignRepository campaignRepository;
     private final UserRepository userRepository;
     private final LeadStatusLogRepository leadStatusLogRepository;
 
-    public LeadService(LeadRepository leadRepository, CampaignRepository campaignRepository, UserRepository userRepository, LeadStatusLogRepository leadStatusLogRepository) {
+    public LeadService(LeadRepository leadRepository,
+                       CampaignRepository campaignRepository,
+                       UserRepository userRepository,
+                       LeadStatusLogRepository leadStatusLogRepository) {
         this.leadRepository = leadRepository;
         this.campaignRepository = campaignRepository;
         this.userRepository = userRepository;
         this.leadStatusLogRepository = leadStatusLogRepository;
     }
 
+    // ───────────────────────────────
+    // CREATE LEAD
+    // ───────────────────────────────
     @Transactional
     public Lead createLead(UUID organizationId, LeadCreateRequest request) {
         Lead lead = new Lead();
@@ -46,7 +55,7 @@ public class LeadService {
         lead.setEmail(request.getEmail());
         lead.setLanguage(request.getLanguage());
         lead.setNotes(request.getNotes());
-        lead.setStatus(LeadStatus.valueOf(request.getStatus().toUpperCase())); // Convert string to enum
+        lead.setStatus(LeadStatus.valueOf(request.getStatus().toUpperCase()));
 
         if (request.getCampaignId() != null) {
             Campaign campaign = campaignRepository.findById(request.getCampaignId())
@@ -62,9 +71,14 @@ public class LeadService {
             lead.setAssignedToUser(assignedUser);
         }
 
-        return leadRepository.save(lead);
+        Lead saved = leadRepository.save(lead);
+        logger.info("Yeni lead oluşturuldu: {} ({})", saved.getId(), saved.getName());
+        return saved;
     }
 
+    // ───────────────────────────────
+    // UPDATE LEAD
+    // ───────────────────────────────
     @Transactional
     public Lead updateLead(UUID leadId, UUID organizationId, LeadUpdateRequest request) {
         Lead lead = leadRepository.findById(leadId)
@@ -89,7 +103,7 @@ public class LeadService {
                     .filter(c -> c.getOrganizationId().equals(organizationId))
                     .orElseThrow(() -> new ResourceNotFoundException("Campaign not found or access denied."));
             lead.setCampaign(campaign);
-        } else if (request.isClearCampaign()) { // Allow clearing campaign
+        } else if (request.isClearCampaign()) {
             lead.setCampaign(null);
         }
 
@@ -98,13 +112,16 @@ public class LeadService {
                     .filter(u -> u.getOrganizationId().equals(organizationId))
                     .orElseThrow(() -> new ResourceNotFoundException("Assigned user not found or access denied."));
             lead.setAssignedToUser(assignedUser);
-        } else if (request.isClearAssignedUser()) { // Allow clearing assigned user
+        } else if (request.isClearAssignedUser()) {
             lead.setAssignedToUser(null);
         }
 
         return leadRepository.save(lead);
     }
 
+    // ───────────────────────────────
+    // DELETE LEAD
+    // ───────────────────────────────
     @Transactional
     public void deleteLead(UUID leadId, UUID organizationId) {
         Lead lead = leadRepository.findById(leadId)
@@ -115,8 +132,12 @@ public class LeadService {
         }
 
         leadRepository.delete(lead);
+        logger.info("Lead silindi: {} ({})", leadId, lead.getName());
     }
 
+    // ───────────────────────────────
+    // GET LEADS
+    // ───────────────────────────────
     public Lead getLeadById(UUID leadId, UUID organizationId) {
         return leadRepository.findById(leadId)
                 .filter(lead -> lead.getOrganizationId().equals(organizationId))
@@ -128,35 +149,38 @@ public class LeadService {
         if (campaignName != null && !campaignName.isEmpty()) {
             campaignId = campaignRepository.findByOrganizationIdAndName(organizationId, campaignName)
                     .map(Campaign::getId)
-                    .orElse(null); // If campaign name doesn't exist, no leads for it
+                    .orElse(null);
         }
 
         LeadStatus leadStatus = null;
         if (status != null && !status.isEmpty()) {
             try {
                 leadStatus = LeadStatus.valueOf(status.toUpperCase());
-            } catch (IllegalArgumentException e) {
-                // Handle invalid status string, perhaps log or throw a specific exception
-                // For now, we'll just treat it as no status filter
+            } catch (IllegalArgumentException ignored) {
             }
         }
 
         return leadRepository.findByOrganizationIdAndFilters(organizationId, campaignId, leadStatus, assignedToUserId);
     }
 
+    // ───────────────────────────────
+    // UPDATE LEAD STATUS
+    // ───────────────────────────────
     @Transactional
     public Lead updateLeadStatus(UUID leadId, LeadStatus newStatus, UUID userId) {
         Lead lead = leadRepository.findById(leadId)
-                .orElseThrow(() -> new ResourceNotFoundException("Lead not found with ID: " + leadId));
+                .orElseThrow(() -> new ResourceNotFoundException("Lead bulunamadı: " + leadId));
 
         LeadStatus oldStatus = lead.getStatus();
-        if (oldStatus == newStatus) return lead; // değişim yoksa loglama gerekmez
+        if (oldStatus == newStatus) {
+            logger.info("Lead {} zaten {} durumunda, güncellenmedi.", leadId, newStatus);
+            return lead;
+        }
 
         lead.setStatus(newStatus);
         lead.setUpdatedAt(Instant.now());
         leadRepository.save(lead);
 
-        // Log kaydı
         LeadStatusLog log = LeadStatusLog.builder()
                 .leadId(leadId)
                 .oldStatus(oldStatus)
@@ -165,20 +189,88 @@ public class LeadService {
                 .build();
 
         leadStatusLogRepository.save(log);
-
-        logger.info("Lead {} status changed: {} → {}", leadId, oldStatus, newStatus);
+        logger.info("Lead {} durumu değişti: {} → {}", leadId, oldStatus, newStatus);
 
         return lead;
     }
 
-    @Scheduled(cron = "0 0 2 * * *") // her gece 02:00'de
+    // ───────────────────────────────
+    // ASSIGN LEAD TO USER
+    // ───────────────────────────────
     @Transactional
-    public void autoCloseLeads() {
-        Instant sevenDaysAgo = Instant.now().minus(7, ChronoUnit.DAYS);
-        List<Lead> oldProposals = leadRepository.findAllByStatusAndUpdatedAtBefore(LeadStatus.PROPOSAL_SENT, sevenDaysAgo);
+    public Lead assignLead(UUID leadId, UUID userId, UUID organizationId) {
+        Lead lead = leadRepository.findById(leadId)
+                .orElseThrow(() -> new ResourceNotFoundException("Lead not found: " + leadId));
 
-        for (Lead lead : oldProposals) {
-            updateLeadStatus(lead.getId(), LeadStatus.CLOSED_LOST, UUID.randomUUID()); // system user gibi davran
+        if (!lead.getOrganizationId().equals(organizationId)) {
+            throw new SecurityException("Access denied: Lead does not belong to this organization.");
         }
+
+        User user = null;
+        if (userId != null) {
+            user = userRepository.findById(userId)
+                    .filter(u -> u.getOrganizationId().equals(organizationId))
+                    .orElseThrow(() -> new ResourceNotFoundException("User not found or access denied."));
+        }
+
+        lead.setAssignedToUser(user);
+        lead.setUpdatedAt(Instant.now());
+        Lead updated = leadRepository.save(lead);
+
+        logger.info("Lead {} kullanıcıya atandı: {}", leadId, (user != null ? user.getEmail() : "unassigned"));
+        return updated;
+    }
+
+    // ───────────────────────────────
+    // BULK ASSIGN LEADS
+    // ───────────────────────────────
+    @Transactional
+    public void bulkAssign(List<UUID> leadIds, UUID userId, UUID organizationId) {
+        User user = userRepository.findById(userId)
+                .filter(u -> u.getOrganizationId().equals(organizationId))
+                .orElseThrow(() -> new ResourceNotFoundException("User not found or access denied."));
+
+        List<Lead> leads = leadRepository.findAllById(leadIds);
+        for (Lead lead : leads) {
+            if (!lead.getOrganizationId().equals(organizationId)) continue;
+            lead.setAssignedToUser(user);
+            lead.setUpdatedAt(Instant.now());
+        }
+
+        leadRepository.saveAll(leads);
+        logger.info("{} lead {} kullanıcısına atandı.", leads.size(), user.getEmail());
+    }
+
+    // ───────────────────────────────
+    // AUTOMATION RULES (SCHEDULED)
+    // ───────────────────────────────
+    @Scheduled(cron = "0 0 3 * * *") // her gece 03:00
+    @Transactional
+    public void autoUpdateLeadStatuses() {
+        Instant now = Instant.now();
+
+        Instant sevenDaysAgo = now.minus(7, ChronoUnit.DAYS);
+        List<Lead> oldProposals =
+                leadRepository.findAllByStatusAndUpdatedAtBefore(LeadStatus.PROPOSAL_SENT, sevenDaysAgo);
+        for (Lead lead : oldProposals) {
+            updateLeadStatus(lead.getId(), LeadStatus.CLOSED_LOST, SYSTEM_USER_ID);
+        }
+
+        Instant threeDaysAgo = now.minus(3, ChronoUnit.DAYS);
+        List<Lead> staleContacted =
+                leadRepository.findAllByStatusAndUpdatedAtBefore(LeadStatus.CONTACTED, threeDaysAgo);
+        for (Lead lead : staleContacted) {
+            updateLeadStatus(lead.getId(), LeadStatus.NEW, SYSTEM_USER_ID);
+        }
+
+        Instant tenDaysAgo = now.minus(10, ChronoUnit.DAYS);
+        List<Lead> inactiveQualified =
+                leadRepository.findAllByStatusAndUpdatedAtBefore(LeadStatus.QUALIFIED, tenDaysAgo);
+        for (Lead lead : inactiveQualified) {
+            updateLeadStatus(lead.getId(), LeadStatus.CLOSED_LOST, SYSTEM_USER_ID);
+        }
+
+        logger.info("Otomatik statü güncelleme tamamlandı (SYSTEM_USER_ID={}): {} teklif, {} contacted, {} qualified güncellendi.",
+                SYSTEM_USER_ID, oldProposals.size(), staleContacted.size(), inactiveQualified.size());
     }
 }
