@@ -7,6 +7,7 @@ import com.leadsyncpro.model.LeadStatus;
 import com.leadsyncpro.model.LeadStatusLog;
 import com.leadsyncpro.repository.LeadStatusLogRepository;
 import com.leadsyncpro.security.UserPrincipal;
+import com.leadsyncpro.service.LeadActionService;
 import com.leadsyncpro.service.LeadActivityLogService;
 import com.leadsyncpro.service.LeadService;
 import jakarta.validation.Valid;
@@ -25,11 +26,13 @@ import java.util.UUID;
 public class LeadController {
 
     private final LeadService leadService;
+    private final LeadActionService leadActionService;
     private final LeadStatusLogRepository leadStatusLogRepository;
     private final LeadActivityLogService leadActivityLogService;
 
-    public LeadController(LeadService leadService, LeadStatusLogRepository leadStatusLogRepository, LeadActivityLogService leadActivityLogService) {
+    public LeadController(LeadService leadService, LeadActionService leadActionService, LeadStatusLogRepository leadStatusLogRepository, LeadActivityLogService leadActivityLogService) {
         this.leadService = leadService;
+        this.leadActionService = leadActionService;
         this.leadStatusLogRepository = leadStatusLogRepository;
         this.leadActivityLogService = leadActivityLogService;
     }
@@ -193,6 +196,34 @@ public class LeadController {
     public ResponseEntity<List<LeadActivityLog>> getLeadLogs(@PathVariable UUID leadId) {
         List<LeadActivityLog> logs = leadActivityLogService.getLogs(leadId);
         return ResponseEntity.ok(logs);
+    }
+
+    /**
+     * Get action logs for a lead (notes, calls, etc.)
+     */
+    @GetMapping("/{leadId}/logs")
+    @PreAuthorize("hasAnyAuthority('USER','ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<List<LeadActionResponse>> getLeadLogs(
+            @PathVariable UUID leadId,
+            @AuthenticationPrincipal UserPrincipal currentUser) {
+
+        List<LeadActionResponse> logs = leadActionService.getActionsForLead(leadId, currentUser.getOrganizationId());
+        if (logs.isEmpty()) return ResponseEntity.noContent().build();
+        return ResponseEntity.ok(logs);
+    }
+
+    /**
+     * Add an action log for a lead.
+     */
+    @PostMapping("/{leadId}/logs")
+    @PreAuthorize("hasAnyAuthority('USER','ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<LeadActionResponse> addLeadLog(
+            @PathVariable UUID leadId,
+            @Valid @RequestBody LeadActionRequest request,
+            @AuthenticationPrincipal UserPrincipal currentUser) {
+
+        LeadActionResponse created = leadActionService.createActionForLead(leadId, currentUser.getOrganizationId(), currentUser.getId(), request);
+        return new ResponseEntity<>(created, HttpStatus.CREATED);
     }
 
 }
