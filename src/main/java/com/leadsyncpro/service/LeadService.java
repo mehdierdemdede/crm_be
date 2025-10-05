@@ -1,6 +1,7 @@
 package com.leadsyncpro.service;
 
 import com.leadsyncpro.dto.LeadCreateRequest;
+import com.leadsyncpro.dto.LeadStatsResponse;
 import com.leadsyncpro.dto.LeadUpdateRequest;
 import com.leadsyncpro.exception.ResourceNotFoundException;
 import com.leadsyncpro.model.*;
@@ -17,8 +18,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
+import java.util.stream.Collectors;
+
+import static java.time.temporal.ChronoUnit.DAYS;
 
 @Service
 public class LeadService {
@@ -249,21 +252,21 @@ public class LeadService {
     public void autoUpdateLeadStatuses() {
         Instant now = Instant.now();
 
-        Instant sevenDaysAgo = now.minus(7, ChronoUnit.DAYS);
+        Instant sevenDaysAgo = now.minus(7, DAYS);
         List<Lead> oldProposals =
                 leadRepository.findAllByStatusAndUpdatedAtBefore(LeadStatus.PROPOSAL_SENT, sevenDaysAgo);
         for (Lead lead : oldProposals) {
             updateLeadStatus(lead.getId(), LeadStatus.CLOSED_LOST, SYSTEM_USER_ID);
         }
 
-        Instant threeDaysAgo = now.minus(3, ChronoUnit.DAYS);
+        Instant threeDaysAgo = now.minus(3, DAYS);
         List<Lead> staleContacted =
                 leadRepository.findAllByStatusAndUpdatedAtBefore(LeadStatus.CONTACTED, threeDaysAgo);
         for (Lead lead : staleContacted) {
             updateLeadStatus(lead.getId(), LeadStatus.NEW, SYSTEM_USER_ID);
         }
 
-        Instant tenDaysAgo = now.minus(10, ChronoUnit.DAYS);
+        Instant tenDaysAgo = now.minus(10, DAYS);
         List<Lead> inactiveQualified =
                 leadRepository.findAllByStatusAndUpdatedAtBefore(LeadStatus.QUALIFIED, tenDaysAgo);
         for (Lead lead : inactiveQualified) {
@@ -273,4 +276,98 @@ public class LeadService {
         logger.info("Otomatik statü güncelleme tamamlandı (SYSTEM_USER_ID={}): {} teklif, {} contacted, {} qualified güncellendi.",
                 SYSTEM_USER_ID, oldProposals.size(), staleContacted.size(), inactiveQualified.size());
     }
+
+    // Yardımcı: ISO Instant parse (null-safe)
+    private Instant parseOrDefault(String iso, Instant def) {
+        if (iso == null || iso.isBlank()) return def;
+        try { return Instant.parse(iso); } catch (Exception e) { return def; }
+    }
+
+    // NEW dışı statüler "contacted" sayılır
+    private static final EnumSet<LeadStatus> CONTACTED_STATUSES = EnumSet.of(
+            LeadStatus.CONTACTED, LeadStatus.QUALIFIED, LeadStatus.PROPOSAL_SENT,
+            LeadStatus.NEGOTIATION, LeadStatus.CLOSED_WON, LeadStatus.CLOSED_LOST
+    );
+
+    /**
+     * Dashboard istatistiklerini döndürür.
+     * startIso / endIso opsiyonel (ISO-8601). Sağlanmazsa son 30 gün.
+     */
+    @Transactional(readOnly = true)
+    public LeadStatsResponse getDashboardStats(UUID organizationId, String startIso, String endIso) {
+        Instant end = parseOrDefault(endIso, Instant.now());
+        Instant start = parseOrDefault(startIso, end.minus(30, DAYS));
+
+        long total = leadRepository.countByOrganizationIdAndCreatedAtBetween(organizationId, start, end);
+
+        // Status breakdown
+        List<Object[]> statusRows = leadRepository.countByStatusBetween(organizationId, start, end);
+        List<LeadStatsResponse.StatusCount> statusBreakdown = statusRows.stream()
+                .map(r -> LeadStatsResponse.StatusCount.builder()
+                        .status(((LeadStatus) r[0]).name())
+                        .count((long) (Long) r[1])
+                        .build())
+                .toList();
+
+        long closedWon = statusBreakdown.stream()
+                .filter(s -> "CLOSED_WON".equals(s.getStatus()))
+                .mapToLong(LeadStatsResponse.StatusCount::getCount)
+                .sum();
+
+        long contacted = statusBreakdown.stream()
+                .filter(s -> !s.getStatus().equals("NEW"))
+                .mapToLong(LeadStatsResponse.StatusCount::getCount)
+                .sum();
+
+        double conversionRate = (total > 0) ? (closedWon * 100.0 / total) : 0.0;
+
+        // Campaign breakdown (toplam dağılım)
+        List<Object[]> campRows = leadRepository.countByCampaignBetween(organizationId, start, end);
+        List<LeadStatsResponse.CampaignCount> campaignBreakdown = campRows.stream()
+                .map(r -> LeadStatsResponse.CampaignCount.builder()
+                        .campaignName((String) r[0])
+                        .count((long) (Long) r[1])
+                        .build())
+                .toList();
+
+        // Ortalama ilk yanıt süresi (createdAt -> ilk LeadStatusLog kaydı)
+        List<Lead> leadsInRange = leadRepository.findByOrganizationIdAndCreatedAtBetween(organizationId, start, end);
+        Map<UUID, Instant> createdMap = leadsInRange.stream()
+                .collect(Collectors.toMap(Lead::getId, Lead::getCreatedAt));
+
+        Long avgFirstRespondMinutes = null;
+        if (!leadsInRange.isEmpty()) {
+            List<UUID> ids = leadsInRange.stream().map(Lead::getId).toList();
+            List<LeadStatusLog> logs = leadStatusLogRepository.findByLeadIdInOrderByCreatedAtAsc(ids);
+
+            // leadId -> ilk log zamanı
+            Map<UUID, Instant> firstLogPerLead = new HashMap<>();
+            for (LeadStatusLog log : logs) {
+                firstLogPerLead.putIfAbsent(log.getId() != null ? log.getLeadId() : null, log.getCreatedAt());
+            }
+
+            long sumMinutes = 0;
+            int counted = 0;
+            for (UUID leadId : ids) {
+                Instant createdAt = createdMap.get(leadId);
+                Instant firstLogAt = firstLogPerLead.get(leadId);
+                if (createdAt != null && firstLogAt != null && firstLogAt.isAfter(createdAt)) {
+                    long minutes = ChronoUnit.MINUTES.between(createdAt, firstLogAt);
+                    sumMinutes += minutes;
+                    counted++;
+                }
+            }
+            if (counted > 0) avgFirstRespondMinutes = sumMinutes / counted;
+        }
+
+        return LeadStatsResponse.builder()
+                .totalLeads(total)
+                .contactedLeads(contacted)
+                .conversionRate(Math.round(conversionRate * 10.0) / 10.0) // 1 ondalık
+                .avgFirstResponseMinutes(avgFirstRespondMinutes)
+                .statusBreakdown(statusBreakdown)
+                .campaignBreakdown(campaignBreakdown)
+                .build();
+    }
+
 }

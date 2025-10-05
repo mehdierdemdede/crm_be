@@ -8,4 +8,6 @@ import java.util.UUID;
 
 public interface LeadStatusLogRepository extends JpaRepository<LeadStatusLog, UUID> {
     List<LeadStatusLog> findByLeadIdOrderByCreatedAtDesc(UUID leadId);
+    List<LeadStatusLog> findByLeadIdInOrderByCreatedAtAsc(List<UUID> leadIds);
+
 }

@@ -2,6 +2,7 @@ package com.leadsyncpro.controller;
 
 import com.leadsyncpro.dto.BulkAssignRequest;
 import com.leadsyncpro.dto.LeadCreateRequest;
+import com.leadsyncpro.dto.LeadStatsResponse;
 import com.leadsyncpro.dto.LeadUpdateRequest;
 import com.leadsyncpro.model.Lead;
 import com.leadsyncpro.model.LeadStatus;
@@ -163,4 +164,16 @@ public class LeadController {
         // TODO: implement export logic
         return ResponseEntity.ok().body(new byte[0]);
     }
+
+    @GetMapping("/stats")
+    @PreAuthorize("hasAnyAuthority('USER','ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<LeadStatsResponse> getLeadStats(
+            @AuthenticationPrincipal UserPrincipal currentUser,
+            @RequestParam(required = false) String start,  // ISO-8601, opsiyonel
+            @RequestParam(required = false) String end     // ISO-8601, opsiyonel
+    ) {
+        LeadStatsResponse res = leadService.getDashboardStats(currentUser.getOrganizationId(), start, end);
+        return ResponseEntity.ok(res);
+    }
+
 }

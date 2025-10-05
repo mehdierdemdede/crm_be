@@ -42,5 +42,34 @@ public interface LeadRepository extends JpaRepository<Lead, UUID> {
 
     List<Lead> findAllByStatusAndUpdatedAtBefore(LeadStatus status, Instant updatedAt);
 
+    long countByOrganizationIdAndCreatedAtBetween(UUID organizationId, Instant start, Instant end);
+
+    @Query("""
+        SELECT l.status, COUNT(l)
+        FROM Lead l
+        WHERE l.organizationId = :orgId
+          AND l.createdAt BETWEEN :start AND :end
+        GROUP BY l.status
+    """)
+    List<Object[]> countByStatusBetween(@Param("orgId") UUID orgId,
+                                        @Param("start") Instant start,
+                                        @Param("end") Instant end);
+
+    @Query("""
+        SELECT COALESCE(c.name, 'Unassigned'), COUNT(l)
+        FROM Lead l
+        LEFT JOIN l.campaign c
+        WHERE l.organizationId = :orgId
+          AND l.createdAt BETWEEN :start AND :end
+        GROUP BY c.name
+        ORDER BY COUNT(l) DESC
+    """)
+    List<Object[]> countByCampaignBetween(@Param("orgId") UUID orgId,
+                                          @Param("start") Instant start,
+                                          @Param("end") Instant end);
+
+    List<Lead> findByOrganizationIdAndCreatedAtBetween(UUID organizationId, Instant start, Instant end);
+
+
 
 }
