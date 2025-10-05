@@ -475,7 +475,7 @@ public class IntegrationService {
                 lead.setNotes("Google Lead Form'dan geldi: " + campaign);
                 lead.setPlatformCreatedAt(platformCreatedAt);
                 leadRepository.save(lead);
-                autoAssignService.assignLeadIfPossible(lead);
+                autoAssignService.assignLeadAutomatically(lead);
                 result.add(lead);
             }
 
@@ -585,7 +585,7 @@ public class IntegrationService {
                                         Lead existing = existingOpt.get();
                                         updateLeadFields(existing, fbLead, formName, formId, pageId);
                                         leadRepository.save(existing);
-                                        autoAssignService.assignLeadIfPossible(existing);
+                                        autoAssignService.assignLeadAutomatically(existing);
                                         logger.info("Updated existing Facebook lead {}", fbLeadId);
                                         result.add(existing);
                                         updatedCount++;
@@ -600,7 +600,7 @@ public class IntegrationService {
                                     updateLeadFields(entity, fbLead, formName, formId, pageId);
 
                                     leadRepository.save(entity);
-                                    autoAssignService.assignLeadIfPossible(entity);
+                                    autoAssignService.assignLeadAutomatically(entity);
                                     result.add(entity);
                                     createdCount++;
                                     logger.info("Created new Facebook lead {}", fbLeadId);

@@ -10,6 +10,7 @@ import com.leadsyncpro.repository.LeadRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -17,47 +18,37 @@ import java.util.stream.Collectors;
 @Service
 public class LeadActionService {
 
-    private final LeadActionRepository leadActionRepository;
     private final LeadRepository leadRepository;
+    private final LeadActionRepository leadActionRepository;
 
-    public LeadActionService(LeadActionRepository leadActionRepository,
-                             LeadRepository leadRepository) {
-        this.leadActionRepository = leadActionRepository;
+    public LeadActionService(LeadRepository leadRepository, LeadActionRepository leadActionRepository) {
         this.leadRepository = leadRepository;
-    }
-
-    public List<LeadActionResponse> getActionsForLead(UUID leadId, UUID orgId) {
-        Lead lead = leadRepository.findById(leadId)
-                .orElseThrow(() -> new ResourceNotFoundException("Lead not found: " + leadId));
-
-        if (!lead.getOrganizationId().equals(orgId)) {
-            throw new SecurityException("Access denied: lead not in your organization");
-        }
-
-        return leadActionRepository.findByLeadIdOrderByCreatedAtDesc(leadId).stream()
-                .map(a -> new LeadActionResponse(a.getId(), a.getLeadId(), a.getUserId(), a.getActionType(), a.getMessage(), a.getCreatedAt()))
-                .collect(Collectors.toList());
+        this.leadActionRepository = leadActionRepository;
     }
 
     @Transactional
-    public LeadActionResponse createActionForLead(UUID leadId, UUID orgId, UUID userId, LeadActionRequest req) {
+    public LeadActionResponse createActionForLead(UUID leadId, UUID organizationId, UUID userId, LeadActionRequest request) {
         Lead lead = leadRepository.findById(leadId)
-                .orElseThrow(() -> new ResourceNotFoundException("Lead not found: " + leadId));
+                .filter(l -> l.getOrganizationId().equals(organizationId))
+                .orElseThrow(() -> new ResourceNotFoundException("Lead not found or not accessible."));
 
-        if (!lead.getOrganizationId().equals(orgId)) {
-            throw new SecurityException("Access denied: lead not in your organization");
-        }
-
-        LeadAction action = LeadAction.builder()
-                .leadId(leadId)
-                .userId(userId)
-                .actionType(req.getActionType())
-                .message(req.getMessage())
-                .build();
+        LeadAction action = new LeadAction();
+        action.setLead(lead);
+        action.setUserId(userId);
+        action.setActionType(request.getActionType());
+        action.setMessage(request.getMessage());
+        action.setCreatedAt(Instant.now());
 
         LeadAction saved = leadActionRepository.save(action);
-
-        return new LeadActionResponse(saved.getId(), saved.getLeadId(), saved.getUserId(), saved.getActionType(), saved.getMessage(), saved.getCreatedAt());
+        return new LeadActionResponse(saved);
     }
 
+    public List<LeadActionResponse> getActionsForLead(UUID leadId, UUID organizationId) {
+        List<LeadAction> actions = leadActionRepository.findByLead_IdOrderByCreatedAtDesc(leadId);
+
+        return actions.stream()
+                .filter(a -> a.getLead().getOrganizationId().equals(organizationId))
+                .map(LeadActionResponse::new)
+                .collect(Collectors.toList());
+    }
 }

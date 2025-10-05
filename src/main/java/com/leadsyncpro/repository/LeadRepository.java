@@ -82,7 +82,7 @@ public interface LeadRepository extends JpaRepository<Lead, UUID> {
     Map<UUID, Long> countTodayAssignmentsByUsers(@Param("orgId") UUID orgId,
                                                  @Param("dayStart") Instant dayStart);
 
-
-
+    long countByAssignedToUser_IdAndCreatedAtBetween(UUID userId, Instant start, Instant end);
+    Optional<Lead> findTopByAssignedToUser_IdOrderByCreatedAtDesc(UUID userId);
 
 }

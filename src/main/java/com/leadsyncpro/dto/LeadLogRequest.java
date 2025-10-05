@@ -1,10 +1,13 @@
 package com.leadsyncpro.dto;
 
-import com.leadsyncpro.model.LeadActionType;
+import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 @Data
+@NoArgsConstructor
+@AllArgsConstructor
 public class LeadLogRequest {
-    private LeadActionType actionType;
-    private String message;
+    private String action;
+    private String details;
 }

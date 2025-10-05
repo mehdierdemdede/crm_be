@@ -94,7 +94,7 @@ public class LeadService {
         }
 
         Lead saved = leadRepository.save(lead);
-        autoAssignService.assignLeadIfPossible(saved);
+        autoAssignService.assignLeadAutomatically(saved);
         logger.info("Yeni lead oluşturuldu: {} ({})", saved.getId(), saved.getName());
         return saved;
     }

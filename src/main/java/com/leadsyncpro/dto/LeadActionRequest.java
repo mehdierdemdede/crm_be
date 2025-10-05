@@ -1,15 +1,13 @@
 package com.leadsyncpro.dto;
 
-import com.leadsyncpro.model.ActionType;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
+import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 @Data
+@NoArgsConstructor
+@AllArgsConstructor
 public class LeadActionRequest {
-    @NotNull
-    private ActionType actionType;
-
-    @NotBlank
+    private String actionType; // örn: "phone", "whatsapp", "note"
     private String message;
 }
