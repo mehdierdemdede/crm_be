@@ -147,4 +147,17 @@ public class LeadController {
     public ResponseEntity<List<LeadActivityLog>> getActivityLogs(@PathVariable UUID leadId) {
         return ResponseEntity.ok(leadActivityLogService.getLogs(leadId));
     }
+
+    @PatchMapping("/{id}/assign")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'SUPER_ADMIN')")
+    public ResponseEntity<Lead> assignLead(
+            @PathVariable UUID id,
+            @RequestParam UUID userId,
+            @AuthenticationPrincipal UserPrincipal currentUser
+    ) {
+        Lead updated = leadService.assignLead(id, userId, currentUser.getOrganizationId());
+        return ResponseEntity.ok(updated);
+    }
+
+
 }
