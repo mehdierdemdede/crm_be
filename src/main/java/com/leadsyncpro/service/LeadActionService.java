@@ -40,7 +40,7 @@ public class LeadActionService {
         action.setCreatedAt(Instant.now());
 
         LeadAction saved = leadActionRepository.save(action);
-        return new LeadActionResponse(saved);
+        return LeadActionResponse.fromEntity(saved);
     }
 
     public List<LeadActionResponse> getActionsForLead(UUID leadId, UUID organizationId) {
@@ -48,7 +48,7 @@ public class LeadActionService {
 
         return actions.stream()
                 .filter(a -> a.getLead().getOrganizationId().equals(organizationId))
-                .map(LeadActionResponse::new)
+                .map(LeadActionResponse::new) // ✅ artık constructor var
                 .collect(Collectors.toList());
     }
 }

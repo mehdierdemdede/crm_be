@@ -39,6 +39,6 @@ public class LeadActivityLogService {
     }
 
     public List<LeadActivityLog> getLogs(UUID leadId) {
-        return leadActivityLogRepository.findByLead_IdOrderByCreatedAtDesc(leadId);
+        return leadActivityLogRepository.findByLeadIdOrderByCreatedAtDesc(leadId);
     }
 }

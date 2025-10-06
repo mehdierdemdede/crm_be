@@ -1,14 +1,9 @@
 package com.leadsyncpro.service;
 
-import com.leadsyncpro.dto.LeadCreateRequest;
-import com.leadsyncpro.dto.LeadStatsResponse;
-import com.leadsyncpro.dto.LeadUpdateRequest;
+import com.leadsyncpro.dto.*;
 import com.leadsyncpro.exception.ResourceNotFoundException;
 import com.leadsyncpro.model.*;
-import com.leadsyncpro.repository.CampaignRepository;
-import com.leadsyncpro.repository.LeadRepository;
-import com.leadsyncpro.repository.LeadStatusLogRepository;
-import com.leadsyncpro.repository.UserRepository;
+import com.leadsyncpro.repository.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -35,17 +30,19 @@ public class LeadService {
     private final CampaignRepository campaignRepository;
     private final UserRepository userRepository;
     private final LeadStatusLogRepository leadStatusLogRepository;
+    private final LeadActivityLogRepository leadActivityLogRepository;
     private final AutoAssignService autoAssignService;
     private final MailService mailService;
 
     public LeadService(LeadRepository leadRepository,
                        CampaignRepository campaignRepository,
                        UserRepository userRepository,
-                       LeadStatusLogRepository leadStatusLogRepository, AutoAssignService autoAssignService, MailService mailService) {
+                       LeadStatusLogRepository leadStatusLogRepository, LeadActivityLogRepository leadActivityLogRepository, AutoAssignService autoAssignService, MailService mailService) {
         this.leadRepository = leadRepository;
         this.campaignRepository = campaignRepository;
         this.userRepository = userRepository;
         this.leadStatusLogRepository = leadStatusLogRepository;
+        this.leadActivityLogRepository = leadActivityLogRepository;
         this.autoAssignService = autoAssignService;
         this.mailService = mailService;
     }
@@ -434,6 +431,34 @@ public class LeadService {
                 .statusBreakdown(statusBreakdown)
                 .campaignBreakdown(campaignBreakdown)
                 .build();
+    }
+
+    @Transactional
+    public LeadActionResponse addActivity(UUID leadId, UUID organizationId, UUID userId, LeadActionRequest request) {
+        // 1) Lead doğrulaması (org bazlı erişim)
+        Lead lead = leadRepository.findById(leadId)
+                .filter(l -> l.getOrganizationId().equals(organizationId))
+                .orElseThrow(() -> new ResourceNotFoundException("Lead not found or not accessible."));
+
+        // 2) Log oluştur
+        LeadActivityLog log = new LeadActivityLog();
+        log.setLead(lead);
+        log.setUserId(userId);
+        log.setAction(request.getActionType());
+        log.setDetails(request.getMessage());
+        log.setCreatedAt(Instant.now());
+
+        // 3) Kaydet
+        LeadActivityLog saved = leadActivityLogRepository.save(log);
+
+        // 4) İlk aksiyon zamanı
+        if (lead.getFirstActionAt() == null) {
+            lead.setFirstActionAt(saved.getCreatedAt());
+            leadRepository.save(lead);
+        }
+
+        // 5) Response
+        return LeadActionResponse.fromEntity(saved);
     }
 
 }

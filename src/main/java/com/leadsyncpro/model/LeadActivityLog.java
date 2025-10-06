@@ -2,8 +2,6 @@ package com.leadsyncpro.model;
 
 import jakarta.persistence.*;
 import lombok.*;
-import org.hibernate.annotations.GenericGenerator;
-
 import java.time.Instant;
 import java.util.UUID;
 
@@ -12,10 +10,11 @@ import java.util.UUID;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@Builder
 public class LeadActivityLog {
+
     @Id
-    @GeneratedValue(generator = "UUID")
-    @GenericGenerator(name = "UUID", strategy = "org.hibernate.id.UUIDGenerator")
+    @GeneratedValue(strategy = GenerationType.AUTO)
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -25,11 +24,12 @@ public class LeadActivityLog {
     @Column(name = "user_id")
     private UUID userId;
 
-    @Column(length = 100)
-    private String action;
+    @Column(name = "action", length = 100)
+    private String action;     // "CALL" | "WHATSAPP" | "NOTE" vs.
 
-    @Column(columnDefinition = "TEXT")
-    private String details;
+    @Column(name = "details", columnDefinition = "TEXT")
+    private String details;    // serbest metin
 
-    private Instant createdAt;
+    @Column(name = "created_at", nullable = false)
+    private Instant createdAt = Instant.now();
 }

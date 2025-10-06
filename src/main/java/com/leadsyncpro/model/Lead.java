@@ -68,6 +68,9 @@ public class Lead {
     @Column(name = "updated_at")
     private Instant updatedAt;
 
+    @Column(name = "first_action_at")
+    private Instant firstActionAt;
+
     // ------------------- Facebook / Google API alanları -------------------
 
     @Enumerated(EnumType.STRING)
