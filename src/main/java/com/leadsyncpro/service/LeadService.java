@@ -267,34 +267,52 @@ public class LeadService {
     // ───────────────────────────────
     // AUTOMATION RULES (SCHEDULED)
     // ───────────────────────────────
-    @Scheduled(cron = "0 0 3 * * *") // her gece 03:00
+    @Scheduled(cron = "0 0 3 * * *") // Her gece 03:00'te çalışır
     @Transactional
     public void autoUpdateLeadStatuses() {
         Instant now = Instant.now();
 
-        Instant sevenDaysAgo = now.minus(7, DAYS);
-        List<Lead> oldProposals =
-                leadRepository.findAllByStatusAndUpdatedAtBefore(LeadStatus.PROPOSAL_SENT, sevenDaysAgo);
-        for (Lead lead : oldProposals) {
-            updateLeadStatus(lead.getId(), LeadStatus.CLOSED_LOST, SYSTEM_USER_ID);
+        // 1️⃣ HOT → 7 gün geçti, hâlâ SOLD değilse bildirim oluştur
+        Instant sevenDaysAgo = now.minus(7, ChronoUnit.DAYS);
+        List<Lead> hotLeads = leadRepository.findAllByStatusAndUpdatedAtBefore(LeadStatus.HOT, sevenDaysAgo);
+        for (Lead lead : hotLeads) {
+            // Burada bildirim servisini çağırabilirsin
+            logger.info("HOT lead {} ({}): 7 gün geçti, satış yapılmadı → Uyarı gönderiliyor.",
+                    lead.getId(), lead.getName());
+            // notificationService.notifyUser(lead.getAssignedToUser(), "Sıcak hasta için 7 gün geçti, satış yapılmadı!");
         }
 
-        Instant threeDaysAgo = now.minus(3, DAYS);
-        List<Lead> staleContacted =
-                leadRepository.findAllByStatusAndUpdatedAtBefore(LeadStatus.CONTACTED, threeDaysAgo);
-        for (Lead lead : staleContacted) {
-            updateLeadStatus(lead.getId(), LeadStatus.NEW, SYSTEM_USER_ID);
+        // 2️⃣ NOT_INTERESTED → ertesi gün Super User’a aktar
+        Instant oneDayAgo = now.minus(1, ChronoUnit.DAYS);
+        List<Lead> uninterestedLeads = leadRepository.findAllByStatusAndUpdatedAtBefore(LeadStatus.NOT_INTERESTED, oneDayAgo);
+        for (Lead lead : uninterestedLeads) {
+            transferToSuperUser(lead, "Lead ilgisiz olarak işaretlendi.");
         }
 
-        Instant tenDaysAgo = now.minus(10, DAYS);
-        List<Lead> inactiveQualified =
-                leadRepository.findAllByStatusAndUpdatedAtBefore(LeadStatus.QUALIFIED, tenDaysAgo);
-        for (Lead lead : inactiveQualified) {
-            updateLeadStatus(lead.getId(), LeadStatus.CLOSED_LOST, SYSTEM_USER_ID);
+        // 3️⃣ BLOCKED → ertesi gün Super User’a aktar
+        List<Lead> blockedLeads = leadRepository.findAllByStatusAndUpdatedAtBefore(LeadStatus.BLOCKED, oneDayAgo);
+        for (Lead lead : blockedLeads) {
+            transferToSuperUser(lead, "Lead blocked olarak işaretlendi.");
         }
 
-        logger.info("Otomatik statü güncelleme tamamlandı (SYSTEM_USER_ID={}): {} teklif, {} contacted, {} qualified güncellendi.",
-                SYSTEM_USER_ID, oldProposals.size(), staleContacted.size(), inactiveQualified.size());
+        // 4️⃣ WRONG_INFO → ertesi gün Super User’a aktar
+        List<Lead> wrongLeads = leadRepository.findAllByStatusAndUpdatedAtBefore(LeadStatus.WRONG_INFO, oneDayAgo);
+        for (Lead lead : wrongLeads) {
+            transferToSuperUser(lead, "Lead yanlış bilgi içeriyor.");
+        }
+
+        logger.info("""
+        Otomatik lead güncelleme tamamlandı:
+        🔸 HOT kontrolü: {} lead
+        🔸 NOT_INTERESTED → SuperUser: {}
+        🔸 BLOCKED → SuperUser: {}
+        🔸 WRONG_INFO → SuperUser: {}
+        """,
+                hotLeads.size(),
+                uninterestedLeads.size(),
+                blockedLeads.size(),
+                wrongLeads.size()
+        );
     }
 
     // Yardımcı: ISO Instant parse (null-safe)
@@ -303,11 +321,39 @@ public class LeadService {
         try { return Instant.parse(iso); } catch (Exception e) { return def; }
     }
 
+    private void transferToSuperUser(Lead lead, String reason) {
+        try {
+            // Super User bul (rolü SUPER_ADMIN olan)
+            Optional<User> superUserOpt = userRepository.findFirstByOrganizationIdAndRole(
+                    lead.getOrganizationId(), Role.SUPER_ADMIN
+            );
+
+            if (superUserOpt.isPresent()) {
+                User superUser = superUserOpt.get();
+                lead.setAssignedToUser(superUser);
+                leadRepository.save(lead);
+                logger.info("Lead {} Super User'a aktarıldı. Sebep: {}", lead.getId(), reason);
+
+                // Bildirim gönder (opsiyonel)
+                // notificationService.notifyUser(superUser, "Yeni lead size aktarıldı: " + lead.getName());
+            } else {
+                logger.warn("Super User bulunamadı, lead {} aktarılmadı.", lead.getId());
+            }
+        } catch (Exception e) {
+            logger.error("Lead {} aktarım hatası: {}", lead.getId(), e.getMessage());
+        }
+    }
+
+
     // NEW dışı statüler "contacted" sayılır
     private static final EnumSet<LeadStatus> CONTACTED_STATUSES = EnumSet.of(
-            LeadStatus.CONTACTED, LeadStatus.QUALIFIED, LeadStatus.PROPOSAL_SENT,
-            LeadStatus.NEGOTIATION, LeadStatus.CLOSED_WON, LeadStatus.CLOSED_LOST
+            LeadStatus.HOT,
+            LeadStatus.SOLD,
+            LeadStatus.NOT_INTERESTED,
+            LeadStatus.BLOCKED,
+            LeadStatus.WRONG_INFO
     );
+
 
     /**
      * Dashboard istatistiklerini döndürür.

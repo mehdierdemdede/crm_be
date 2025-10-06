@@ -81,11 +81,17 @@ public class ReportService {
                 .map(e -> {
                     User u = userRepository.findById(e.getKey()).orElse(null);
                     long total = e.getValue().size();
+
+                    // 💡 Yeni satış metriği: SOLD durumundaki leadler
                     long sales = e.getValue().stream()
-                            .filter(l -> l.getStatus() == LeadStatus.CLOSED_WON)
+                            .filter(l -> l.getStatus() == LeadStatus.SOLD)
                             .count();
-                    String name = u != null ? u.getFirstName() + " " + u.getLastName() : "Unknown";
-                    return new UserPerformance(name, sales, total);
+
+                    String name = u != null
+                            ? u.getFirstName() + " " + (u.getLastName() != null ? u.getLastName() : "")
+                            : "Unknown";
+
+                    return new UserPerformance(name.trim(), sales, total);
                 })
                 .sorted(Comparator.comparingLong(UserPerformance::getSales).reversed())
                 .toList();

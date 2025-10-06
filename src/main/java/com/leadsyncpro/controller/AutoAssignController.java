@@ -1,8 +1,8 @@
 package com.leadsyncpro.controller;
 
+import com.leadsyncpro.security.UserPrincipal;
 import com.leadsyncpro.service.AutoAssignService;
 import com.leadsyncpro.service.AutoAssignService.AgentStatsResponse;
-import com.leadsyncpro.security.UserPrincipal;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -27,7 +27,6 @@ public class AutoAssignController {
             @AuthenticationPrincipal UserPrincipal currentUser) {
 
         UUID orgId = currentUser.getOrganizationId();
-        List<AgentStatsResponse> stats = autoAssignService.getAgentStats(orgId);
-        return ResponseEntity.ok(stats);
+        return ResponseEntity.ok(autoAssignService.getAgentStats(orgId));
     }
 }

@@ -447,7 +447,7 @@ public class IntegrationService {
                     lead.setOrganizationId(organizationId);
                     lead.setPlatform(IntegrationPlatform.GOOGLE);
                     lead.setSourceLeadId(leadId);
-                    lead.setStatus(LeadStatus.NEW);
+                    lead.setStatus(LeadStatus.UNCONTACTED);
                     createdCount++;
                 }
 
@@ -713,7 +713,7 @@ public class IntegrationService {
 
         // Status sadece ilk kayıt sırasında NEW atanmalı, update sırasında dokunma
         if (lead.getStatus() == null) {
-            lead.setStatus(LeadStatus.NEW);
+            lead.setStatus(LeadStatus.UNCONTACTED);
         }
     }
 
