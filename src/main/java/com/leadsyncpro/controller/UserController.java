@@ -161,4 +161,13 @@ public class UserController {
         }
         return new ResponseEntity<>(HttpStatus.NO_CONTENT);
     }
+
+    @GetMapping("/me")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<User> getCurrentUser(@AuthenticationPrincipal UserPrincipal currentUser) {
+        User user = userService.findById(currentUser.getId());
+        return ResponseEntity.ok(user);
+    }
+
+
 }

@@ -1,5 +1,6 @@
 package com.leadsyncpro.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.*;
 import org.hibernate.annotations.GenericGenerator;
 import jakarta.persistence.*;
@@ -49,6 +50,8 @@ public class Lead {
     private String notes;
 
     // 🔹 İlişkilendirilmiş kampanya (nullable olabilir)
+
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "campaign_id")
     private Campaign campaign;
@@ -58,9 +61,14 @@ public class Lead {
     private LeadStatus status;
 
     // 🔹 Lead hangi kullanıcıya atanmış
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "assigned_to_user_id")
     private User assignedToUser;
+
+    @Column(name = "external_id", length = 100)
+    private String externalId;
+
 
     @Column(name = "created_at", updatable = false)
     private Instant createdAt;

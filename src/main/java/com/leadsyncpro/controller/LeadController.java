@@ -1,17 +1,23 @@
 package com.leadsyncpro.controller;
 
 import com.leadsyncpro.dto.*;
-import com.leadsyncpro.model.*;
+import com.leadsyncpro.model.Lead;
+import com.leadsyncpro.model.LeadActivityLog;
+import com.leadsyncpro.model.LeadStatus;
+import com.leadsyncpro.model.LeadStatusLog;
 import com.leadsyncpro.repository.LeadStatusLogRepository;
 import com.leadsyncpro.security.UserPrincipal;
-import com.leadsyncpro.service.*;
+import com.leadsyncpro.service.LeadActionService;
+import com.leadsyncpro.service.LeadActivityLogService;
+import com.leadsyncpro.service.LeadService;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.UUID;
@@ -40,24 +46,26 @@ public class LeadController {
     // 🔹 CRUD İşlemleri
     // --------------------------------------------------------------
 
+    @GetMapping
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'USER', 'SUPER_ADMIN')")
+    public ResponseEntity<Page<Lead>> getAllLeads(
+            @AuthenticationPrincipal UserPrincipal currentUser,
+            @RequestParam(required = false) String campaign,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) UUID assigneeId,
+            Pageable pageable // ✅ pagination + sorting otomatik
+    ) {
+        Page<Lead> leads = leadService.getLeadsByOrganizationPaged(
+                currentUser.getOrganizationId(), campaign, status, assigneeId, pageable);
+        return ResponseEntity.ok(leads);
+    }
+
     @PostMapping
     @PreAuthorize("hasAnyAuthority('ADMIN', 'USER', 'SUPER_ADMIN')")
     public ResponseEntity<Lead> createLead(@Valid @RequestBody LeadCreateRequest request,
                                            @AuthenticationPrincipal UserPrincipal currentUser) {
         Lead newLead = leadService.createLead(currentUser.getOrganizationId(), request);
         return new ResponseEntity<>(newLead, HttpStatus.CREATED);
-    }
-
-    @GetMapping
-    @PreAuthorize("hasAnyAuthority('ADMIN', 'USER', 'SUPER_ADMIN')")
-    public ResponseEntity<List<Lead>> getAllLeads(
-            @AuthenticationPrincipal UserPrincipal currentUser,
-            @RequestParam(required = false) String campaign,
-            @RequestParam(required = false) String status,
-            @RequestParam(required = false) UUID assigneeId) {
-        List<Lead> leads = leadService.getLeadsByOrganization(
-                currentUser.getOrganizationId(), campaign, status, assigneeId);
-        return ResponseEntity.ok(leads);
     }
 
     @GetMapping("/{id}")

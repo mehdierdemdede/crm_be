@@ -7,6 +7,7 @@ import com.leadsyncpro.model.Lead;
 import com.leadsyncpro.model.LeadAction;
 import com.leadsyncpro.repository.LeadActionRepository;
 import com.leadsyncpro.repository.LeadRepository;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,9 +29,13 @@ public class LeadActionService {
 
     @Transactional
     public LeadActionResponse createActionForLead(UUID leadId, UUID organizationId, UUID userId, LeadActionRequest request) {
+        // Lead doğrulama
         Lead lead = leadRepository.findById(leadId)
-                .filter(l -> l.getOrganizationId().equals(organizationId))
-                .orElseThrow(() -> new ResourceNotFoundException("Lead not found or not accessible."));
+                .orElseThrow(() -> new ResourceNotFoundException("Lead not found."));
+
+        if (!lead.getOrganizationId().equals(organizationId)) {
+            throw new AccessDeniedException("Lead not accessible for this organization");
+        }
 
         LeadAction action = new LeadAction();
         action.setLead(lead);
@@ -42,6 +47,7 @@ public class LeadActionService {
         LeadAction saved = leadActionRepository.save(action);
         return LeadActionResponse.fromEntity(saved);
     }
+
 
     public List<LeadActionResponse> getActionsForLead(UUID leadId, UUID organizationId) {
         List<LeadAction> actions = leadActionRepository.findByLead_IdOrderByCreatedAtDesc(leadId);

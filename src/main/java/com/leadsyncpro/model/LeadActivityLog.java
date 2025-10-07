@@ -25,7 +25,8 @@ public class LeadActivityLog {
     private UUID userId;
 
     @Column(name = "action", length = 100)
-    private String action;     // "CALL" | "WHATSAPP" | "NOTE" vs.
+    @Enumerated(EnumType.STRING)
+    private ActionType action;     // "CALL" | "WHATSAPP" | "NOTE" vs.
 
     @Column(name = "details", columnDefinition = "TEXT")
     private String details;    // serbest metin

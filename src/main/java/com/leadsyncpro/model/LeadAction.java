@@ -25,8 +25,9 @@ public class LeadAction {
     @Column(name = "user_id")
     private UUID userId;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "action_type", length = 50)
-    private String actionType;
+    private ActionType actionType;
 
     @Column(columnDefinition = "TEXT")
     private String message;

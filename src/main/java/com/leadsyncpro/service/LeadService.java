@@ -7,6 +7,8 @@ import com.leadsyncpro.repository.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -182,6 +184,33 @@ public class LeadService {
 
         return leadRepository.findByOrganizationIdAndFilters(organizationId, campaignId, leadStatus, assignedToUserId);
     }
+
+    public Page<Lead> getLeadsByOrganizationPaged(UUID organizationId,
+                                                  String campaign,
+                                                  String status,
+                                                  UUID assigneeId,
+                                                  Pageable pageable) {
+        LeadStatus statusEnum = null;
+
+        if (status != null && !status.isBlank()) {
+            try {
+                statusEnum = LeadStatus.valueOf(status.trim().toUpperCase());
+            } catch (IllegalArgumentException ignored) {
+                // Geçersiz bir status değeri gelirse, filtreleme yapılmaz
+                statusEnum = null;
+            }
+        }
+
+        // 🧩 Null-safe sorgu çağrısı
+        return leadRepository.findByOrganizationIdAndOptionalFilters(
+                organizationId,
+                (campaign != null && !campaign.isBlank()) ? campaign.trim() : null,
+                statusEnum,
+                assigneeId,
+                pageable
+        );
+    }
+
 
     // ───────────────────────────────
     // UPDATE LEAD STATUS

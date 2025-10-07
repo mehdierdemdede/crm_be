@@ -1,5 +1,8 @@
 package com.leadsyncpro.dto;
 
+import com.leadsyncpro.model.ActionType;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -8,6 +11,9 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class LeadActionRequest {
-    private String actionType; // örn: "phone", "whatsapp", "note"
+
+    @Enumerated(EnumType.STRING)
+    private ActionType actionType; // örn: "phone", "whatsapp", "note"
+
     private String message;
 }

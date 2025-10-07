@@ -1,7 +1,10 @@
 package com.leadsyncpro.dto;
 
+import com.leadsyncpro.model.ActionType;
 import com.leadsyncpro.model.LeadAction;
 import com.leadsyncpro.model.LeadActivityLog;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import lombok.*;
 import java.time.Instant;
 import java.util.UUID;
@@ -13,7 +16,10 @@ import java.util.UUID;
 public class LeadActionResponse {
 
     private UUID id;
-    private String actionType;
+
+    @Enumerated(EnumType.STRING)
+    private ActionType actionType;
+
     private String message;
     private Instant createdAt;
     private UUID userId;
