@@ -220,7 +220,18 @@ public class LeadService {
     // UPDATE LEAD STATUS
     // ───────────────────────────────
     @Transactional
-    public LeadResponse updateLeadStatus(UUID leadId, LeadStatus newStatus, UUID userId, UUID organizationId) {
+    public LeadResponse updateLeadStatus(UUID leadId, String newStatusValue, UUID userId, UUID organizationId) {
+        if (newStatusValue == null || newStatusValue.isBlank()) {
+            throw new IllegalArgumentException("Status cannot be empty.");
+        }
+
+        LeadStatus newStatus;
+        try {
+            newStatus = LeadStatus.valueOf(newStatusValue.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalArgumentException("Invalid lead status: " + newStatusValue);
+        }
+
         Lead lead = leadRepository.findById(leadId)
                 .orElseThrow(() -> new ResourceNotFoundException("Lead bulunamadı: " + leadId));
 
