@@ -34,6 +34,9 @@ public class Lead {
     @Column(name = "organization_id", nullable = false)
     private UUID organizationId;
 
+    @Transient
+    private UUID lastSaleId; // son satış kaydının ID'si
+
     @Column(nullable = false)
     private String name;
 
