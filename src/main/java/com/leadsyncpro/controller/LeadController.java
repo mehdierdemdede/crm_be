@@ -3,6 +3,7 @@ package com.leadsyncpro.controller;
 import com.leadsyncpro.dto.*;
 import com.leadsyncpro.model.Lead;
 import com.leadsyncpro.model.LeadActivityLog;
+import com.leadsyncpro.model.LeadStatus;
 import com.leadsyncpro.model.LeadStatusLog;
 import com.leadsyncpro.repository.LeadStatusLogRepository;
 import com.leadsyncpro.security.UserPrincipal;
@@ -17,6 +18,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.UUID;
@@ -98,9 +100,22 @@ public class LeadController {
     @PatchMapping("/{id}/status")
     @PreAuthorize("hasAnyAuthority('USER', 'ADMIN', 'SUPER_ADMIN')")
     public ResponseEntity<LeadResponse> updateLeadStatus(@PathVariable UUID id,
-                                                         @Valid @RequestBody LeadStatusUpdateRequest request,
+                                                         @RequestParam(value = "status", required = false) LeadStatus statusParam,
+                                                         @RequestBody(required = false) LeadStatusUpdateRequest request,
                                                          @AuthenticationPrincipal UserPrincipal currentUser) {
-        LeadResponse updated = leadService.updateLeadStatus(id, request.getStatus(), currentUser.getId(), currentUser.getOrganizationId());
+        LeadStatus requestedStatus = null;
+        if (request != null) {
+            requestedStatus = request.getStatus();
+        }
+        if (requestedStatus == null) {
+            requestedStatus = statusParam;
+        }
+
+        if (requestedStatus == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Lead status is required");
+        }
+
+        LeadResponse updated = leadService.updateLeadStatus(id, requestedStatus, currentUser.getId(), currentUser.getOrganizationId());
         return ResponseEntity.ok(updated);
     }
 
