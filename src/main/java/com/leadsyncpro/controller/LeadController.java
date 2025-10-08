@@ -3,7 +3,6 @@ package com.leadsyncpro.controller;
 import com.leadsyncpro.dto.*;
 import com.leadsyncpro.model.Lead;
 import com.leadsyncpro.model.LeadActivityLog;
-import com.leadsyncpro.model.LeadStatus;
 import com.leadsyncpro.model.LeadStatusLog;
 import com.leadsyncpro.repository.LeadStatusLogRepository;
 import com.leadsyncpro.security.UserPrincipal;
@@ -70,8 +69,8 @@ public class LeadController {
 
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'USER', 'SUPER_ADMIN')")
-    public ResponseEntity<Lead> getLeadById(@PathVariable UUID id,
-                                            @AuthenticationPrincipal UserPrincipal currentUser) {
+    public ResponseEntity<LeadResponse> getLeadById(@PathVariable UUID id,
+                                                    @AuthenticationPrincipal UserPrincipal currentUser) {
         return ResponseEntity.ok(leadService.getLeadById(id, currentUser.getOrganizationId()));
     }
 
@@ -98,10 +97,10 @@ public class LeadController {
 
     @PatchMapping("/{id}/status")
     @PreAuthorize("hasAnyAuthority('USER', 'ADMIN', 'SUPER_ADMIN')")
-    public ResponseEntity<Lead> updateLeadStatus(@PathVariable UUID id,
-                                                 @RequestParam LeadStatus status,
-                                                 @AuthenticationPrincipal UserPrincipal currentUser) {
-        Lead updated = leadService.updateLeadStatus(id, status, currentUser.getId());
+    public ResponseEntity<LeadResponse> updateLeadStatus(@PathVariable UUID id,
+                                                         @Valid @RequestBody LeadStatusUpdateRequest request,
+                                                         @AuthenticationPrincipal UserPrincipal currentUser) {
+        LeadResponse updated = leadService.updateLeadStatus(id, request.getStatus(), currentUser.getId(), currentUser.getOrganizationId());
         return ResponseEntity.ok(updated);
     }
 

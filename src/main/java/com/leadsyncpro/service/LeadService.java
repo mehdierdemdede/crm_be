@@ -35,11 +35,12 @@ public class LeadService {
     private final LeadActivityLogRepository leadActivityLogRepository;
     private final AutoAssignService autoAssignService;
     private final MailService mailService;
+    private final SalesRepository salesRepository;
 
     public LeadService(LeadRepository leadRepository,
                        CampaignRepository campaignRepository,
                        UserRepository userRepository,
-                       LeadStatusLogRepository leadStatusLogRepository, LeadActivityLogRepository leadActivityLogRepository, AutoAssignService autoAssignService, MailService mailService) {
+                       LeadStatusLogRepository leadStatusLogRepository, LeadActivityLogRepository leadActivityLogRepository, AutoAssignService autoAssignService, MailService mailService, SalesRepository salesRepository) {
         this.leadRepository = leadRepository;
         this.campaignRepository = campaignRepository;
         this.userRepository = userRepository;
@@ -47,6 +48,7 @@ public class LeadService {
         this.leadActivityLogRepository = leadActivityLogRepository;
         this.autoAssignService = autoAssignService;
         this.mailService = mailService;
+        this.salesRepository = salesRepository;
     }
 
     // ───────────────────────────────
@@ -160,10 +162,12 @@ public class LeadService {
     // ───────────────────────────────
     // GET LEADS
     // ───────────────────────────────
-    public Lead getLeadById(UUID leadId, UUID organizationId) {
-        return leadRepository.findById(leadId)
-                .filter(lead -> lead.getOrganizationId().equals(organizationId))
+    public LeadResponse getLeadById(UUID leadId, UUID organizationId) {
+        Lead lead = leadRepository.findById(leadId)
+                .filter(l -> l.getOrganizationId().equals(organizationId))
                 .orElseThrow(() -> new ResourceNotFoundException("Lead not found or access denied."));
+
+        return mapToLeadResponse(lead);
     }
 
     public List<Lead> getLeadsByOrganization(UUID organizationId, String campaignName, String status, UUID assignedToUserId) {
@@ -216,19 +220,23 @@ public class LeadService {
     // UPDATE LEAD STATUS
     // ───────────────────────────────
     @Transactional
-    public Lead updateLeadStatus(UUID leadId, LeadStatus newStatus, UUID userId) {
+    public LeadResponse updateLeadStatus(UUID leadId, LeadStatus newStatus, UUID userId, UUID organizationId) {
         Lead lead = leadRepository.findById(leadId)
                 .orElseThrow(() -> new ResourceNotFoundException("Lead bulunamadı: " + leadId));
+
+        if (!lead.getOrganizationId().equals(organizationId)) {
+            throw new SecurityException("Access denied: Lead does not belong to this organization.");
+        }
 
         LeadStatus oldStatus = lead.getStatus();
         if (oldStatus == newStatus) {
             logger.info("Lead {} zaten {} durumunda, güncellenmedi.", leadId, newStatus);
-            return lead;
+            return mapToLeadResponse(lead);
         }
 
         lead.setStatus(newStatus);
         lead.setUpdatedAt(Instant.now());
-        leadRepository.save(lead);
+        Lead savedLead = leadRepository.save(lead);
 
         LeadStatusLog log = LeadStatusLog.builder()
                 .leadId(leadId)
@@ -240,7 +248,35 @@ public class LeadService {
         leadStatusLogRepository.save(log);
         logger.info("Lead {} durumu değişti: {} → {}", leadId, oldStatus, newStatus);
 
-        return lead;
+        return mapToLeadResponse(savedLead);
+    }
+
+    private LeadResponse mapToLeadResponse(Lead lead) {
+        Optional<Sale> lastSale = salesRepository
+                .findTopByLead_IdAndOrganizationIdOrderByCreatedAtDesc(lead.getId(), lead.getOrganizationId());
+
+        SaleResponse lastSaleResponse = lastSale.map(this::mapToSaleResponse).orElse(null);
+
+        return LeadResponse.builder()
+                .id(lead.getId())
+                .name(lead.getName())
+                .status(lead.getStatus())
+                .phone(lead.getPhone())
+                .messengerPageId(lead.getPageId())
+                .lastSaleId(lastSale.map(Sale::getId).orElse(null))
+                .lastSale(lastSaleResponse)
+                .build();
+    }
+
+    private SaleResponse mapToSaleResponse(Sale sale) {
+        return SaleResponse.builder()
+                .id(sale.getId())
+                .leadId(sale.getLead() != null ? sale.getLead().getId() : null)
+                .productName(sale.getOperationType())
+                .amount(sale.getPrice())
+                .currency(sale.getCurrency())
+                .createdAt(sale.getCreatedAt())
+                .build();
     }
 
     // ───────────────────────────────

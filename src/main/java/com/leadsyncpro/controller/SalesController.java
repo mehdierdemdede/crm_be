@@ -48,6 +48,14 @@ public class SalesController {
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
+    @GetMapping("/{saleId}")
+    @PreAuthorize("hasAnyAuthority('ADMIN','USER','SUPER_ADMIN')")
+    public ResponseEntity<SaleResponse> getSaleById(@PathVariable UUID saleId,
+                                                   @AuthenticationPrincipal UserPrincipal currentUser) {
+        SaleResponse response = salesService.getSaleById(saleId, currentUser.getOrganizationId());
+        return ResponseEntity.ok(response);
+    }
+
     /**
      * 📁 Belge indirme veya görüntüleme
      * - PDF, JPG, PNG gibi dosyalar tarayıcıda açılır.

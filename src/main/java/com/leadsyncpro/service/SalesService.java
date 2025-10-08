@@ -65,16 +65,14 @@ public class SalesService {
 
         Sale saved = salesRepository.save(sale);
 
-        return SaleResponse.builder()
-                .id(saved.getId())
-                .operationType(saved.getOperationType())
-                .price(saved.getPrice())
-                .currency(saved.getCurrency())
-                .hotel(saved.getHotel())
-                .nights(saved.getNights())
-                .documentPath(saved.getDocumentPath())
-                .createdAt(saved.getCreatedAt())
-                .build();
+        return mapToSaleResponse(saved);
+    }
+
+    public SaleResponse getSaleById(UUID saleId, UUID organizationId) {
+        Sale sale = salesRepository.findByIdAndOrganizationId(saleId, organizationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Sale not found"));
+
+        return mapToSaleResponse(sale);
     }
 
     private String writeJson(SaleRequest req) {
@@ -84,5 +82,16 @@ public class SalesService {
             log.warn("Transfer JSON serialization failed: {}", e.getMessage());
             return "[]";
         }
+    }
+
+    private SaleResponse mapToSaleResponse(Sale sale) {
+        return SaleResponse.builder()
+                .id(sale.getId())
+                .leadId(sale.getLead() != null ? sale.getLead().getId() : null)
+                .productName(sale.getOperationType())
+                .amount(sale.getPrice())
+                .currency(sale.getCurrency())
+                .createdAt(sale.getCreatedAt())
+                .build();
     }
 }
