@@ -83,7 +83,7 @@ public class UserController {
                 ? request.getOrganizationId()
                 : currentUser.getOrganizationId();
         if (targetOrgId == null) {
-            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+            return ResponseEntity.badRequest().build();
         }
 
         User newUser = userService.createUser(
@@ -94,7 +94,7 @@ public class UserController {
                 request.getLastName(),
                 request.getRole()
         );
-        return new ResponseEntity<>(newUser, HttpStatus.CREATED);
+        return ResponseEntity.status(HttpStatus.CREATED).body(newUser);
     }
 
     // Get all users for the current organization (Admin) or all users (SuperAdmin)
@@ -159,7 +159,7 @@ public class UserController {
         } else {
             userService.deleteUser(id, currentUser.getOrganizationId());
         }
-        return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/me")

@@ -66,7 +66,7 @@ public class LeadController {
     public ResponseEntity<Lead> createLead(@Valid @RequestBody LeadCreateRequest request,
                                            @AuthenticationPrincipal UserPrincipal currentUser) {
         Lead newLead = leadService.createLead(currentUser.getOrganizationId(), request);
-        return new ResponseEntity<>(newLead, HttpStatus.CREATED);
+        return ResponseEntity.status(HttpStatus.CREATED).body(newLead);
     }
 
     @GetMapping("/{id}")
@@ -90,7 +90,7 @@ public class LeadController {
     public ResponseEntity<Void> deleteLead(@PathVariable UUID id,
                                            @AuthenticationPrincipal UserPrincipal currentUser) {
         leadService.deleteLead(id, currentUser.getOrganizationId());
-        return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+        return ResponseEntity.noContent().build();
     }
 
     // --------------------------------------------------------------
@@ -138,7 +138,7 @@ public class LeadController {
                                                             @AuthenticationPrincipal UserPrincipal currentUser) {
         LeadActionResponse created = leadActionService.createActionForLead(
                 leadId, currentUser.getOrganizationId(), currentUser.getId(), req);
-        return new ResponseEntity<>(created, HttpStatus.CREATED);
+        return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
     @GetMapping("/{leadId}/actions")
