@@ -100,7 +100,7 @@ public class IntegrationController {
 
         IntegrationPlatform integrationPlatform = IntegrationPlatform.valueOf(platform.toUpperCase());
         integrationService.deleteIntegrationConfig(organizationId, integrationPlatform);
-        return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/fetch-leads/{platform}")

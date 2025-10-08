@@ -3,6 +3,7 @@ package com.leadsyncpro.controller;
 import com.leadsyncpro.model.TransferRoute;
 import com.leadsyncpro.repository.TransferRouteRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -23,7 +24,7 @@ public class TransferRouteController {
 
     @PostMapping
     public ResponseEntity<TransferRoute> create(@RequestBody TransferRoute route) {
-        return ResponseEntity.ok(repo.save(route));
+        return ResponseEntity.status(HttpStatus.CREATED).body(repo.save(route));
     }
 
     @PutMapping("/{id}")

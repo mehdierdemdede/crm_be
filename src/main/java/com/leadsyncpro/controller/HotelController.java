@@ -3,6 +3,7 @@ package com.leadsyncpro.controller;
 import com.leadsyncpro.model.Hotel;
 import com.leadsyncpro.repository.HotelRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -23,7 +24,7 @@ public class HotelController {
 
     @PostMapping
     public ResponseEntity<Hotel> createHotel(@RequestBody Hotel hotel) {
-        return ResponseEntity.ok(hotelRepository.save(hotel));
+        return ResponseEntity.status(HttpStatus.CREATED).body(hotelRepository.save(hotel));
     }
 
     @PutMapping("/{id}")
