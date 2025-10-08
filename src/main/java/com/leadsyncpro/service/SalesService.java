@@ -48,7 +48,7 @@ public class SalesService {
         // 🔹 Dosya varsa kaydet
         if (file != null && !file.isEmpty()) {
             try {
-                String dirPath = "uploads/documents";
+                String dirPath = "";
                 File dir = new File(dirPath);
                 if (!dir.exists()) dir.mkdirs();
 
