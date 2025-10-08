@@ -100,14 +100,14 @@ public class LeadController {
     @PatchMapping("/{id}/status")
     @PreAuthorize("hasAnyAuthority('USER', 'ADMIN', 'SUPER_ADMIN')")
     public ResponseEntity<LeadResponse> updateLeadStatus(@PathVariable UUID id,
-                                                         @RequestParam(value = "status", required = false) LeadStatus statusParam,
+                                                         @RequestParam(value = "status", required = false) String statusParam,
                                                          @RequestBody(required = false) LeadStatusUpdateRequest request,
                                                          @AuthenticationPrincipal UserPrincipal currentUser) {
-        LeadStatus requestedStatus = null;
-        if (request != null) {
+        String requestedStatus = null;
+        if (request != null && request.getStatus() != null && !request.getStatus().isBlank()) {
             requestedStatus = request.getStatus();
         }
-        if (requestedStatus == null) {
+        if (requestedStatus == null && statusParam != null && !statusParam.isBlank()) {
             requestedStatus = statusParam;
         }
 

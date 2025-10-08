@@ -50,6 +50,7 @@ public class User {
     private Role role;
 
     @Column(name = "is_active")
+    @Builder.Default
     private boolean isActive = true;
 
     @ElementCollection(targetClass = SupportedLanguages.class)
@@ -61,6 +62,7 @@ public class User {
     private Integer dailyCapacity;
 
     @Column(name = "auto_assign_enabled")
+    @Builder.Default
     private boolean autoAssignEnabled = false;
 
     @Column(name = "created_at", updatable = false)
