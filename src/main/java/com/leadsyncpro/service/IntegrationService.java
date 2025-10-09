@@ -149,7 +149,9 @@ public class IntegrationService {
                 .collect(java.util.stream.Collectors.toMap(IntegrationConfig::getPlatform, config -> config));
 
         List<IntegrationStatusResponse> statuses = new ArrayList<>();
-        for (IntegrationPlatform platform : IntegrationPlatform.values()) {
+        Arrays.stream(IntegrationPlatform.values())
+                .sorted(Comparator.comparing(Enum::name))
+                .forEach(platform -> {
             IntegrationConfig config = byPlatform.get(platform);
             if (config != null) {
                 statuses.add(IntegrationStatusResponse.builder()
@@ -166,7 +168,7 @@ public class IntegrationService {
                         .connected(false)
                         .build());
             }
-        }
+        });
         return statuses;
     }
 
