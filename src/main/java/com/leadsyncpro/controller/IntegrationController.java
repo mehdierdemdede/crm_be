@@ -1,5 +1,6 @@
 package com.leadsyncpro.controller;
 
+import com.leadsyncpro.dto.IntegrationStatusResponse;
 import com.leadsyncpro.dto.LeadSyncResult;
 import com.leadsyncpro.exception.ResourceNotFoundException;
 import com.leadsyncpro.model.*;
@@ -195,6 +196,20 @@ public class IntegrationController {
         IntegrationConfig config = integrationService.getIntegrationConfig(organizationId, integrationPlatform)
                 .orElseThrow(() -> new ResourceNotFoundException("Integration not found for platform " + platform));
         return ResponseEntity.ok(config);
+    }
+
+    @GetMapping("/status")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'SUPER_ADMIN')")
+    public ResponseEntity<List<IntegrationStatusResponse>> getIntegrationStatuses(
+            @AuthenticationPrincipal UserPrincipal currentUser) {
+
+        UUID organizationId = currentUser.getOrganizationId();
+        if (currentUser.getRole() == Role.SUPER_ADMIN && organizationId == null) {
+            throw new IllegalArgumentException("Super Admin must specify organization ID to retrieve integration config.");
+        }
+
+        List<IntegrationStatusResponse> statuses = integrationService.getIntegrationStatuses(organizationId);
+        return ResponseEntity.ok(statuses);
     }
 
     @DeleteMapping("/{platform}")

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.pemistahl.lingua.api.Language;
 import com.github.pemistahl.lingua.api.LanguageDetector;
 import com.github.pemistahl.lingua.api.LanguageDetectorBuilder;
+import com.leadsyncpro.dto.IntegrationStatusResponse;
 import com.leadsyncpro.dto.LeadSyncResult;
 import com.leadsyncpro.exception.ResourceNotFoundException;
 import com.leadsyncpro.model.*;
@@ -139,6 +140,34 @@ public class IntegrationService {
 
     public Optional<IntegrationConfig> getIntegrationConfig(UUID organizationId, IntegrationPlatform platform) {
         return integrationConfigRepository.findByOrganizationIdAndPlatform(organizationId, platform);
+    }
+
+    public List<IntegrationStatusResponse> getIntegrationStatuses(UUID organizationId) {
+        Map<IntegrationPlatform, IntegrationConfig> byPlatform = integrationConfigRepository
+                .findByOrganizationId(organizationId)
+                .stream()
+                .collect(java.util.stream.Collectors.toMap(IntegrationConfig::getPlatform, config -> config));
+
+        List<IntegrationStatusResponse> statuses = new ArrayList<>();
+        for (IntegrationPlatform platform : IntegrationPlatform.values()) {
+            IntegrationConfig config = byPlatform.get(platform);
+            if (config != null) {
+                statuses.add(IntegrationStatusResponse.builder()
+                        .platform(platform)
+                        .connected(true)
+                        .connectedAt(config.getCreatedAt())
+                        .expiresAt(config.getExpiresAt())
+                        .lastSyncedAt(config.getLastSyncedAt())
+                        .platformPageId(config.getPlatformPageId())
+                        .build());
+            } else {
+                statuses.add(IntegrationStatusResponse.builder()
+                        .platform(platform)
+                        .connected(false)
+                        .build());
+            }
+        }
+        return statuses;
     }
 
     @Transactional
