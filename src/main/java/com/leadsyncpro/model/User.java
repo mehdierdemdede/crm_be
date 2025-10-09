@@ -4,8 +4,9 @@ import lombok.*;
 import org.hibernate.annotations.GenericGenerator;
 import jakarta.persistence.*;
 import java.time.Instant;
-import java.util.UUID;
+import java.util.EnumSet;
 import java.util.Set;
+import java.util.UUID;
 
 @Entity
 @Table(
@@ -36,7 +37,7 @@ public class User {
     @Column(nullable = false)
     private String email;
 
-    @Column(name = "password_hash", nullable = false)
+    @Column(name = "password_hash")
     private String passwordHash;
 
     @Column(name = "first_name")
@@ -53,10 +54,12 @@ public class User {
     @Builder.Default
     private boolean isActive = true;
 
-    @ElementCollection(targetClass = SupportedLanguages.class)
+    @ElementCollection(fetch = FetchType.LAZY, targetClass = SupportedLanguages.class)
+    @CollectionTable(name = "user_supported_languages", joinColumns = @JoinColumn(name = "user_id"))
     @Enumerated(EnumType.STRING)
-    @Column(name = "supported_languages")
-    private Set<SupportedLanguages> supportedLanguages;
+    @Column(name = "language")
+    @Builder.Default
+    private Set<SupportedLanguages> supportedLanguages = EnumSet.noneOf(SupportedLanguages.class);
 
     @Column(name = "daily_capacity")
     private Integer dailyCapacity;
