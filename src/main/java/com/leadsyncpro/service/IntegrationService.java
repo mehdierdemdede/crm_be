@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.pemistahl.lingua.api.Language;
 import com.github.pemistahl.lingua.api.LanguageDetector;
 import com.github.pemistahl.lingua.api.LanguageDetectorBuilder;
+import com.leadsyncpro.dto.LeadSyncResult;
 import com.leadsyncpro.exception.ResourceNotFoundException;
 import com.leadsyncpro.model.*;
 import com.leadsyncpro.repository.CampaignRepository;
@@ -368,7 +369,7 @@ public class IntegrationService {
      * Bu metod, Google Ads API istemci kütüphanesiyle tam olarak implemente edilmelidir.
      */
     @Transactional
-    public List<Lead> fetchGoogleLeads(UUID organizationId) {
+    public LeadSyncResult fetchGoogleLeads(UUID organizationId) {
         IntegrationLog runLog = IntegrationLog.builder()
                 .organizationId(organizationId)
                 .platform(IntegrationPlatform.GOOGLE)
@@ -421,7 +422,7 @@ public class IntegrationService {
             if (rows == null) {
                 logger.info("Google API boş döndü.");
                 runLog.setTotalFetched(0);
-                return Collections.emptyList();
+                return new LeadSyncResult(0, 0, 0);
             }
 
             for (Map<String, Object> row : rows) {
@@ -493,7 +494,7 @@ public class IntegrationService {
             integrationLogRepository.save(runLog);
         }
 
-        return result;
+        return new LeadSyncResult(result.size(), createdCount, updatedCount);
     }
 
 
@@ -502,7 +503,7 @@ public class IntegrationService {
      * Bu metod, Facebook Graph API ile tam olarak implemente edilmelidir.
      */
     @Transactional
-    public List<Lead> fetchFacebookLeads(UUID organizationId) {
+    public LeadSyncResult fetchFacebookLeads(UUID organizationId) {
         IntegrationLog runLog = IntegrationLog.builder()
                 .organizationId(organizationId)
                 .platform(IntegrationPlatform.FACEBOOK)
@@ -526,16 +527,36 @@ public class IntegrationService {
             String userAccessToken = encryptionService.decrypt(config.getAccessToken());
             if (userAccessToken == null) throw new SecurityException("User access token çözülemedi.");
 
+            Instant lastSyncedLeadCreatedAt = config.getLastLeadCreatedTime();
+            Instant latestFetchedLeadCreatedAt = lastSyncedLeadCreatedAt;
+
             // Sayfa access token
-            String pageAccessToken = null;
+            String pageAccessToken = config.getPageAccessToken();
+            boolean tokenFromApi = false;
             try {
                 Map pageResp = restTemplate.getForObject(
                         "https://graph.facebook.com/v18.0/{pageId}?fields=access_token&access_token={uat}",
                         Map.class, pageId, userAccessToken
                 );
-                if (pageResp != null) pageAccessToken = (String) pageResp.get("access_token");
-            } catch (Exception ignored) {}
-            if (pageAccessToken == null) throw new RuntimeException("Page access token alınamadı.");
+                if (pageResp != null) {
+                    String freshToken = (String) pageResp.get("access_token");
+                    if (freshToken != null && !freshToken.isBlank()) {
+                        pageAccessToken = freshToken;
+                        tokenFromApi = true;
+                    }
+                }
+            } catch (Exception ex) {
+                logger.warn("Facebook sayfa access token alınırken hata: {}", ex.getMessage());
+            }
+
+            if (pageAccessToken == null || pageAccessToken.isBlank()) {
+                throw new RuntimeException("Page access token alınamadı.");
+            }
+
+            if (tokenFromApi) {
+                config.setPageAccessToken(pageAccessToken);
+                config.setPageTokenUpdatedAt(Instant.now());
+            }
 
             final String LEAD_FIELDS = String.join(",",
                     "id",
@@ -589,6 +610,18 @@ public class IntegrationService {
                                         logger.info("Updated existing Facebook lead {}", fbLeadId);
                                         result.add(existing);
                                         updatedCount++;
+                                        Instant leadCreated = existing.getPlatformCreatedAt();
+                                        if (leadCreated != null && (latestFetchedLeadCreatedAt == null || leadCreated.isAfter(latestFetchedLeadCreatedAt))) {
+                                            latestFetchedLeadCreatedAt = leadCreated;
+                                        }
+                                        continue;
+                                    }
+
+                                    Instant leadCreatedAt = parseInstant(asString(fbLead.get("created_time")));
+                                    if (lastSyncedLeadCreatedAt != null
+                                            && leadCreatedAt != null
+                                            && leadCreatedAt.isBefore(lastSyncedLeadCreatedAt)) {
+                                        logger.debug("Facebook lead {} daha önce senkronize edilmiş, atlanıyor.", fbLeadId);
                                         continue;
                                     }
 
@@ -604,6 +637,11 @@ public class IntegrationService {
                                     result.add(entity);
                                     createdCount++;
                                     logger.info("Created new Facebook lead {}", fbLeadId);
+
+                                    Instant leadCreated = entity.getPlatformCreatedAt();
+                                    if (leadCreated != null && (latestFetchedLeadCreatedAt == null || leadCreated.isAfter(latestFetchedLeadCreatedAt))) {
+                                        latestFetchedLeadCreatedAt = leadCreated;
+                                    }
                                 }
                             }
 
@@ -618,6 +656,14 @@ public class IntegrationService {
             runLog.setTotalFetched(result.size());
             runLog.setNewCreated(createdCount);
             runLog.setUpdated(updatedCount);
+            config.setLastSyncedAt(Instant.now());
+            if (latestFetchedLeadCreatedAt != null
+                    && (config.getLastLeadCreatedTime() == null || latestFetchedLeadCreatedAt.isAfter(config.getLastLeadCreatedTime()))) {
+                config.setLastLeadCreatedTime(latestFetchedLeadCreatedAt);
+            }
+
+            integrationConfigRepository.save(config);
+
             logger.info("Facebook entegrasyonu tamamlandı: fetched={}, created={}, updated={}",
                     result.size(), createdCount, updatedCount);
         } catch (Exception e) {
@@ -628,7 +674,7 @@ public class IntegrationService {
             integrationLogRepository.save(runLog);
         }
 
-        return result;
+        return new LeadSyncResult(result.size(), createdCount, updatedCount);
     }
 
 
@@ -679,6 +725,7 @@ public class IntegrationService {
 
         // field_data parse
         String name = null, email = null, phone = null;
+        Map<String, String> extraFields = new LinkedHashMap<>();
         Object fdObj = fbLead.get("field_data");
         if (fdObj instanceof List) {
             for (Map<String,Object> f : (List<Map<String,Object>>) fdObj) {
@@ -691,6 +738,10 @@ public class IntegrationService {
                     case "email":       email = fval; break;
                     case "phone":
                     case "phone_number":phone = fval; break;
+                    default:
+                        if (fval != null) {
+                            extraFields.put(fname, fval);
+                        }
                 }
             }
         }
@@ -698,6 +749,23 @@ public class IntegrationService {
         if (name != null) lead.setName(name);
         if (email != null) lead.setEmail(email);
         if (phone != null) lead.setPhone(phone);
+
+        if (!extraFields.isEmpty()) {
+            try {
+                lead.setExtraFieldsJson(objectMapper.writeValueAsString(extraFields));
+            } catch (Exception e) {
+                logger.warn("Facebook lead extra alanları JSON'a dönüştürülemedi: {}", e.getMessage());
+            }
+        }
+
+        Object disclaimerResponses = fbLead.get("custom_disclaimer_responses");
+        if (disclaimerResponses != null) {
+            try {
+                lead.setDisclaimerResponsesJson(objectMapper.writeValueAsString(disclaimerResponses));
+            } catch (Exception e) {
+                logger.warn("Facebook lead disclaimer yanıtları JSON'a dönüştürülemedi: {}", e.getMessage());
+            }
+        }
 
         lead.setFormId(formId);
         lead.setFormName(formName);
@@ -710,6 +778,17 @@ public class IntegrationService {
         lead.setFbCampaignName(campNm);
         lead.setOrganic(organic);
         lead.setPlatformCreatedAt(platformCreatedAt);
+
+        if ((lead.getNotes() == null || lead.getNotes().isBlank()) && formName != null) {
+            lead.setNotes("Facebook formu: " + formName);
+        }
+
+        if (lead.getLanguage() == null && lead.getNotes() != null) {
+            try {
+                lead.setLanguage(detectLanguageFromText(lead.getNotes()));
+            } catch (Exception ignored) {
+            }
+        }
 
         // Status sadece ilk kayıt sırasında NEW atanmalı, update sırasında dokunma
         if (lead.getStatus() == null) {
