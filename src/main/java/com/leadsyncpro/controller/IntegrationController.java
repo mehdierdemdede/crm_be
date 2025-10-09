@@ -1,5 +1,6 @@
 package com.leadsyncpro.controller;
 
+import com.leadsyncpro.dto.LeadSyncResult;
 import com.leadsyncpro.exception.ResourceNotFoundException;
 import com.leadsyncpro.model.*;
 import com.leadsyncpro.repository.IntegrationLogRepository;
@@ -105,22 +106,23 @@ public class IntegrationController {
 
     @PostMapping("/fetch-leads/{platform}")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'SUPER_ADMIN')")
-    public ResponseEntity<String> fetchLeadsManually(@PathVariable String platform,
-                                                     @AuthenticationPrincipal UserPrincipal currentUser) {
+    public ResponseEntity<LeadSyncResult> fetchLeadsManually(@PathVariable String platform,
+                                                             @AuthenticationPrincipal UserPrincipal currentUser) {
         UUID organizationId = currentUser.getOrganizationId();
         if (currentUser.getRole() == Role.SUPER_ADMIN && organizationId == null) {
             throw new IllegalArgumentException("Super Admin must specify organization ID to fetch leads.");
         }
 
         IntegrationPlatform integrationPlatform = IntegrationPlatform.valueOf(platform.toUpperCase());
+        LeadSyncResult result;
         if (integrationPlatform == IntegrationPlatform.GOOGLE) {
-            integrationService.fetchGoogleLeads(organizationId);
+            result = integrationService.fetchGoogleLeads(organizationId);
         } else if (integrationPlatform == IntegrationPlatform.FACEBOOK) {
-            integrationService.fetchFacebookLeads(organizationId);
+            result = integrationService.fetchFacebookLeads(organizationId);
         } else {
-            return ResponseEntity.badRequest().body("Unsupported platform: " + platform);
+            throw new IllegalArgumentException("Unsupported platform: " + platform);
         }
-        return ResponseEntity.ok("Lead fetching initiated for " + platform + " for organization " + organizationId);
+        return ResponseEntity.ok(result);
     }
 
     /**
