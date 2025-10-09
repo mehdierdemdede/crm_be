@@ -18,8 +18,9 @@ manual lead fetches, and surface the results to users.
 
 3. **Persisted state**
    - After the callback completes the backend stores encrypted access tokens and the selected page ID.
-   - The frontend can confirm connection status by calling `GET /api/integrations/facebook` (requires
-     `ADMIN` or `SUPER_ADMIN`).
+   - The frontend can confirm connection status by calling `GET /api/integrations/status` (requires
+     `ADMIN` or `SUPER_ADMIN`). This endpoint returns the connection state for both Facebook and Google.
+   - If you only need the raw configuration you can still call `GET /api/integrations/facebook`.
 
 ## 2. Manual lead fetch
 

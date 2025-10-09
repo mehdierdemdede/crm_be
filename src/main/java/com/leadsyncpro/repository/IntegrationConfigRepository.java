@@ -8,5 +8,7 @@ import java.util.UUID;
 
 public interface IntegrationConfigRepository extends JpaRepository<IntegrationConfig, UUID> {
     Optional<IntegrationConfig> findByOrganizationIdAndPlatform(UUID organizationId, IntegrationPlatform platform);
+
+    java.util.List<IntegrationConfig> findByOrganizationId(UUID organizationId);
 }
 
