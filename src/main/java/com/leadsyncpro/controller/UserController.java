@@ -59,8 +59,17 @@ public class UserController {
             orgId = req.getOrganizationId();
         }
 
-        User u = userService.createAndInviteUser(orgId, req.getEmail(), req.getFirstName(),
-                req.getLastName(), req.getRole());
+        User u = userService.createAndInviteUser(
+                orgId,
+                req.getEmail(),
+                req.getFirstName(),
+                req.getLastName(),
+                req.getRole(),
+                req.getSupportedLanguages(),
+                req.getDailyCapacity(),
+                req.isActive(),
+                req.isAutoAssignEnabled()
+        );
         return ResponseEntity.status(HttpStatus.CREATED).body(UserResponse.from(u));
     }
 
@@ -77,7 +86,7 @@ public class UserController {
     // Create User (Admin or SuperAdmin)
     @PostMapping
     @PreAuthorize("hasAnyAuthority('ADMIN', 'SUPER_ADMIN')")
-    public ResponseEntity<User> createUser(@Valid @RequestBody UserCreateRequest request,
+    public ResponseEntity<UserResponse> createUser(@Valid @RequestBody UserCreateRequest request,
                                            @AuthenticationPrincipal UserPrincipal currentUser) {
         UUID targetOrgId = currentUser.getRole() == Role.SUPER_ADMIN
                 ? request.getOrganizationId()
@@ -92,9 +101,13 @@ public class UserController {
                 request.getPassword(),
                 request.getFirstName(),
                 request.getLastName(),
-                request.getRole()
+                request.getRole(),
+                request.getSupportedLanguages(),
+                request.getDailyCapacity(),
+                request.isActive(),
+                request.isAutoAssignEnabled()
         );
-        return ResponseEntity.status(HttpStatus.CREATED).body(newUser);
+        return ResponseEntity.status(HttpStatus.CREATED).body(UserResponse.from(newUser));
     }
 
     // Get all users for the current organization (Admin) or all users (SuperAdmin)
@@ -123,7 +136,7 @@ public class UserController {
     // Update User (Admin or SuperAdmin)
     @PutMapping("/{id}")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'SUPER_ADMIN')")
-    public ResponseEntity<User> updateUser(@PathVariable UUID id,
+    public ResponseEntity<UserResponse> updateUser(@PathVariable UUID id,
                                            @Valid @RequestBody UserUpdateRequest request,
                                            @AuthenticationPrincipal UserPrincipal currentUser) {
         // SuperAdmin can update any user, Admin only users within their organization
@@ -143,9 +156,12 @@ public class UserController {
                 request.getFirstName(),
                 request.getLastName(),
                 request.getRole(),
-                request.getIsActive()
+                request.getIsActive(),
+                request.getSupportedLanguages(),
+                request.getDailyCapacity(),
+                request.getAutoAssignEnabled()
         );
-        return ResponseEntity.ok(updatedUser);
+        return ResponseEntity.ok(UserResponse.from(updatedUser));
     }
 
     // Delete User (Admin or SuperAdmin)

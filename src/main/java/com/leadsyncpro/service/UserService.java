@@ -2,15 +2,19 @@ package com.leadsyncpro.service;
 
 import com.leadsyncpro.exception.ResourceNotFoundException;
 import com.leadsyncpro.model.Role;
+import com.leadsyncpro.model.SupportedLanguages;
 import com.leadsyncpro.model.User;
 import com.leadsyncpro.repository.UserRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.Optional;
+import java.util.EnumSet;
 
 @Service
 public class UserService {
@@ -27,28 +31,53 @@ public class UserService {
     }
 
     @Transactional
-    public User createUser(UUID organizationId, String email, String password, String firstName, String lastName, Role role) {
-        if (userRepository.existsByOrganizationIdAndEmail(organizationId, email)) {
+    public User createUser(UUID organizationId,
+                           String email,
+                           String password,
+                           String firstName,
+                           String lastName,
+                           Role role,
+                           Set<SupportedLanguages> supportedLanguages,
+                           Integer dailyCapacity,
+                           boolean isActive,
+                           boolean autoAssignEnabled) {
+        String normalizedEmail = email.toLowerCase();
+        if (userRepository.existsByOrganizationIdAndEmail(organizationId, normalizedEmail)) {
             throw new IllegalArgumentException("User with this email already exists in this organization.");
         }
         User user = new User();
         user.setOrganizationId(organizationId);
-        user.setEmail(email);
-        user.setPasswordHash(passwordEncoder.encode(password)); // Hash password
+        user.setEmail(normalizedEmail);
+        if (StringUtils.hasText(password)) {
+            user.setPasswordHash(passwordEncoder.encode(password));
+        } else {
+            user.setPasswordHash(null);
+        }
         user.setFirstName(firstName);
         user.setLastName(lastName);
         user.setRole(role);
-        user.setActive(true);
+        user.setActive(isActive);
+        user.setAutoAssignEnabled(autoAssignEnabled);
+        user.setDailyCapacity(dailyCapacity);
+        user.setSupportedLanguages(normalizeSupportedLanguages(supportedLanguages));
         return userRepository.save(user);
     }
 
     @Transactional
-    public User updateUser(UUID userId, UUID organizationId, String firstName, String lastName, Role role, Boolean isActive) {
+    public User updateUser(UUID userId,
+                           UUID organizationId,
+                           String firstName,
+                           String lastName,
+                           Role role,
+                           Boolean isActive,
+                           Set<SupportedLanguages> supportedLanguages,
+                           Integer dailyCapacity,
+                           Boolean autoAssignEnabled) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + userId));
 
         // Ensure the user belongs to the correct organization (multi-tenancy check)
-        if (!user.getOrganizationId().equals(organizationId)) {
+        if (organizationId != null && !user.getOrganizationId().equals(organizationId)) {
             throw new SecurityException("Access denied: User does not belong to this organization.");
         }
 
@@ -56,6 +85,15 @@ public class UserService {
         if (lastName != null) user.setLastName(lastName);
         if (role != null) user.setRole(role);
         if (isActive != null) user.setActive(isActive);
+        if (supportedLanguages != null) {
+            user.setSupportedLanguages(normalizeSupportedLanguages(supportedLanguages));
+        }
+        if (dailyCapacity != null) {
+            user.setDailyCapacity(dailyCapacity);
+        }
+        if (autoAssignEnabled != null) {
+            user.setAutoAssignEnabled(autoAssignEnabled);
+        }
 
         return userRepository.save(user);
     }
@@ -66,7 +104,7 @@ public class UserService {
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + userId));
 
         // Ensure the user belongs to the correct organization (multi-tenancy check)
-        if (!user.getOrganizationId().equals(organizationId)) {
+        if (organizationId != null && !user.getOrganizationId().equals(organizationId)) {
             throw new SecurityException("Access denied: User does not belong to this organization.");
         }
 
@@ -100,19 +138,31 @@ public class UserService {
 
 
     @Transactional
-    public User createAndInviteUser(UUID orgId, String email, String firstName, String lastName, Role role) {
-        if (userRepository.existsByOrganizationIdAndEmail(orgId, email)) {
+    public User createAndInviteUser(UUID orgId,
+                                    String email,
+                                    String firstName,
+                                    String lastName,
+                                    Role role,
+                                    Set<SupportedLanguages> supportedLanguages,
+                                    Integer dailyCapacity,
+                                    boolean isActive,
+                                    boolean autoAssignEnabled) {
+        String normalizedEmail = email.toLowerCase();
+        if (userRepository.existsByOrganizationIdAndEmail(orgId, normalizedEmail)) {
             throw new IllegalArgumentException("User with this email already exists in this organization.");
         }
 
         User user = new User();
         user.setOrganizationId(orgId);
-        user.setEmail(email.toLowerCase());
+        user.setEmail(normalizedEmail);
         user.setPasswordHash(null);
         user.setFirstName(firstName);
         user.setLastName(lastName);
         user.setRole(role);
-        user.setActive(false);
+        user.setActive(isActive);
+        user.setAutoAssignEnabled(autoAssignEnabled);
+        user.setDailyCapacity(dailyCapacity);
+        user.setSupportedLanguages(normalizeSupportedLanguages(supportedLanguages));
 
         userRepository.save(user);
 
@@ -120,6 +170,13 @@ public class UserService {
         inviteService.createInvite(user);
 
         return user;
+    }
+
+    private Set<SupportedLanguages> normalizeSupportedLanguages(Set<SupportedLanguages> languages) {
+        if (languages == null || languages.isEmpty()) {
+            return EnumSet.noneOf(SupportedLanguages.class);
+        }
+        return EnumSet.copyOf(languages);
     }
 
 }
