@@ -26,6 +26,7 @@ public class AutoAssignService {
     private final UserRepository userRepository;
     private final LeadRepository leadRepository;
     private final MailService mailService;
+    private final LeadDistributionService leadDistributionService;
 
     // ✅ İstatistik DTO
     @Data
@@ -85,6 +86,18 @@ public class AutoAssignService {
     // ✅ Asıl motor: lead’i uygun kullanıcıya otomatik ata
     @Transactional
     public Optional<User> assignLeadAutomatically(Lead lead) {
+        if (lead == null) {
+            return Optional.empty();
+        }
+
+        Optional<User> byRule = leadDistributionService.assignLeadByRule(lead);
+        if (byRule.isPresent()) {
+            leadRepository.save(lead);
+            notifyAssigned(byRule.get(), lead);
+            logger.info("✅ Lead {} assigned by Facebook rule to user {}", lead.getId(), byRule.get().getEmail());
+            return byRule;
+        }
+
         UUID orgId = lead.getOrganizationId();
         String leadLang = lead.getLanguage();
 
@@ -150,22 +163,25 @@ public class AutoAssignService {
         lead.setAssignedToUser(selected);
         leadRepository.save(lead);
 
-        // 🔹 Mail bildirimi gönder
+        notifyAssigned(selected, lead);
+
+        logger.info("✅ Auto-assigned lead {} to user {}", lead.getId(), selected.getEmail());
+        return Optional.of(selected);
+    }
+
+    private void notifyAssigned(User user, Lead lead) {
         try {
             mailService.sendLeadAssignedEmail(
-                    selected.getEmail(),
-                    selected.getFirstName(),
+                    user.getEmail(),
+                    user.getFirstName(),
                     lead.getName(),
                     lead.getCampaign() != null ? lead.getCampaign().getName() : null,
                     lead.getLanguage(),
                     lead.getStatus() != null ? lead.getStatus().name() : "NEW",
-                    lead.getId().toString()
+                    lead.getId() != null ? lead.getId().toString() : null
             );
         } catch (Exception e) {
             logger.warn("Mail gönderilemedi: {}", e.getMessage());
         }
-
-        logger.info("✅ Auto-assigned lead {} to user {}", lead.getId(), selected.getEmail());
-        return Optional.of(selected);
     }
 }

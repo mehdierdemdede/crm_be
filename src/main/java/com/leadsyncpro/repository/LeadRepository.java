@@ -109,5 +109,17 @@ public interface LeadRepository extends JpaRepository<Lead, UUID> {
 
     Optional<Lead> findByExternalIdAndPlatform(String externalId, IntegrationPlatform platform);
 
+    @Query("""
+        SELECT DISTINCT l.pageId, l.fbCampaignId, l.fbCampaignName, l.adsetId, l.adsetName, l.adId, l.adName
+        FROM Lead l
+        WHERE l.organizationId = :orgId
+          AND l.platform = :platform
+          AND l.pageId IS NOT NULL
+          AND l.fbCampaignId IS NOT NULL
+          AND l.adsetId IS NOT NULL
+          AND l.adId IS NOT NULL
+    """)
+    List<Object[]> findDistinctFacebookHierarchy(@Param("orgId") UUID organizationId,
+                                                 @Param("platform") IntegrationPlatform platform);
 
 }
