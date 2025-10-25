@@ -93,6 +93,53 @@ public class IntegrationService {
     }
 
 
+    private void updateConnectionStatus(IntegrationConfig config,
+                                        IntegrationConnectionStatus status,
+                                        String statusMessage,
+                                        String errorMessage) {
+        if (config == null) {
+            return;
+        }
+
+        config.setConnectionStatus(status);
+        config.setStatusMessage(statusMessage);
+
+        if (status == IntegrationConnectionStatus.ERROR) {
+            config.setLastErrorAt(Instant.now());
+            config.setLastErrorMessage(errorMessage);
+        } else {
+            config.setLastErrorAt(null);
+            config.setLastErrorMessage(null);
+        }
+    }
+
+    private IntegrationConnectionStatus resolveEffectiveStatus(IntegrationConfig config) {
+        if (config == null) {
+            return IntegrationConnectionStatus.DISCONNECTED;
+        }
+
+        IntegrationConnectionStatus status = config.getConnectionStatus();
+        if (status == null) {
+            status = config.getAccessToken() != null
+                    ? IntegrationConnectionStatus.CONNECTED
+                    : IntegrationConnectionStatus.DISCONNECTED;
+        }
+
+        Instant expiresAt = config.getExpiresAt();
+        if (expiresAt != null && Instant.now().isAfter(expiresAt)) {
+            return IntegrationConnectionStatus.EXPIRED;
+        }
+
+        return status;
+    }
+
+    private boolean requiresAction(IntegrationConnectionStatus status) {
+        return status == IntegrationConnectionStatus.ERROR
+                || status == IntegrationConnectionStatus.EXPIRED
+                || status == IntegrationConnectionStatus.DISCONNECTED;
+    }
+
+
     public IntegrationService(IntegrationConfigRepository integrationConfigRepository,
                               EncryptionService encryptionService,
                               ClientRegistrationRepository clientRegistrationRepository,
@@ -134,6 +181,8 @@ public class IntegrationService {
         config.setCreatedBy(createdBy);
         // platformPageId burada ayarlanacak, ancak handleOAuth2Callback'de belirlenecek.
         // Eğer bu metod doğrudan çağrılıyorsa ve pageId yoksa, null kalır.
+        updateConnectionStatus(config, IntegrationConnectionStatus.CONNECTED,
+                "OAuth yapılandırması manuel olarak kaydedildi.", null);
 
         return integrationConfigRepository.save(config);
     }
@@ -152,23 +201,24 @@ public class IntegrationService {
         Arrays.stream(IntegrationPlatform.values())
                 .sorted(Comparator.comparing(Enum::name))
                 .forEach(platform -> {
-            IntegrationConfig config = byPlatform.get(platform);
-            if (config != null) {
-                statuses.add(IntegrationStatusResponse.builder()
-                        .platform(platform)
-                        .connected(true)
-                        .connectedAt(config.getCreatedAt())
-                        .expiresAt(config.getExpiresAt())
-                        .lastSyncedAt(config.getLastSyncedAt())
-                        .platformPageId(config.getPlatformPageId())
-                        .build());
-            } else {
-                statuses.add(IntegrationStatusResponse.builder()
-                        .platform(platform)
-                        .connected(false)
-                        .build());
-            }
-        });
+                    IntegrationConfig config = byPlatform.get(platform);
+                    IntegrationConnectionStatus status = resolveEffectiveStatus(config);
+
+                    statuses.add(IntegrationStatusResponse.builder()
+                            .platform(platform)
+                            .connected(config != null)
+                            .connectedAt(config != null ? config.getCreatedAt() : null)
+                            .expiresAt(config != null ? config.getExpiresAt() : null)
+                            .lastSyncedAt(config != null ? config.getLastSyncedAt() : null)
+                            .platformPageId(config != null ? config.getPlatformPageId() : null)
+                            .status(status)
+                            .statusMessage(config != null ? config.getStatusMessage()
+                                    : platform.name() + " entegrasyonu henüz yapılandırılmadı.")
+                            .lastErrorAt(config != null ? config.getLastErrorAt() : null)
+                            .lastErrorMessage(config != null ? config.getLastErrorMessage() : null)
+                            .requiresAction(requiresAction(status))
+                            .build());
+                });
         return statuses;
     }
 
@@ -187,6 +237,14 @@ public class IntegrationService {
         if (clientRegistration == null) {
             throw new IllegalArgumentException("Geçersiz istemci kayıt ID'si: " + registrationId);
         }
+
+        IntegrationPlatform platform = IntegrationPlatform.valueOf(registrationId.toUpperCase());
+        integrationConfigRepository.findByOrganizationIdAndPlatform(organizationId, platform)
+                .ifPresent(config -> {
+                    updateConnectionStatus(config, IntegrationConnectionStatus.PENDING,
+                            "OAuth yetkilendirme akışı başlatıldı.", null);
+                    integrationConfigRepository.save(config);
+                });
 
         String state = organizationId + "|" + userId;
 
@@ -237,106 +295,120 @@ public class IntegrationService {
         UUID organizationId = UUID.fromString(stateParts[0]);
         UUID userId = UUID.fromString(stateParts[1]);
 
-        MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
-        params.add("grant_type", "authorization_code");
-        params.add("client_id", clientRegistration.getClientId());
-        params.add("client_secret", clientRegistration.getClientSecret());
-        String redirectUri = clientRegistration.getRedirectUri();
-        if (redirectUri.contains("{baseUrl}")) {
-            redirectUri = redirectUri.replace("{baseUrl}", "http://localhost:8080");
-        }
-        params.add("redirect_uri", redirectUri);
-        params.add("code", code);
+        IntegrationPlatform platform = IntegrationPlatform.valueOf(registrationId.toUpperCase());
+        IntegrationConfig existingConfig = integrationConfigRepository
+                .findByOrganizationIdAndPlatform(organizationId, platform)
+                .orElse(null);
 
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
-        HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(params, headers);
+        IntegrationConfig config = existingConfig != null ? existingConfig : new IntegrationConfig();
 
-        ResponseEntity<Map> response = restTemplate.exchange(
-                clientRegistration.getProviderDetails().getTokenUri(),
-                HttpMethod.POST,
-                request,
-                Map.class
-        );
+        try {
+            MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+            params.add("grant_type", "authorization_code");
+            params.add("client_id", clientRegistration.getClientId());
+            params.add("client_secret", clientRegistration.getClientSecret());
+            String redirectUri = clientRegistration.getRedirectUri();
+            if (redirectUri.contains("{baseUrl}")) {
+                redirectUri = redirectUri.replace("{baseUrl}", "http://localhost:8080");
+            }
+            params.add("redirect_uri", redirectUri);
+            params.add("code", code);
 
-        Map<String, Object> tokenResponse = response.getBody();
-        if (tokenResponse == null || !tokenResponse.containsKey("access_token")) {
-            throw new RuntimeException("Erişim token'ı alınamadı.");
-        }
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+            HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(params, headers);
 
-        String accessToken = (String) tokenResponse.get("access_token");
-        String refreshToken = (String) tokenResponse.get("refresh_token");
+            ResponseEntity<Map> response = restTemplate.exchange(
+                    clientRegistration.getProviderDetails().getTokenUri(),
+                    HttpMethod.POST,
+                    request,
+                    Map.class
+            );
 
-        Long expiresInSeconds = null;
-        Object expiresInObj = tokenResponse.get("expires_in");
-        if (expiresInObj instanceof Number) {
-            expiresInSeconds = ((Number) expiresInObj).longValue();
-        } else if (expiresInObj instanceof String) {
-            try { expiresInSeconds = Long.parseLong((String) expiresInObj); } catch (NumberFormatException ignored) {}
-        }
-        Instant expiresAt = (expiresInSeconds != null) ? Instant.now().plus(expiresInSeconds, ChronoUnit.SECONDS) : null;
-        String scope = (String) tokenResponse.get("scope");
+            Map<String, Object> tokenResponse = response.getBody();
+            if (tokenResponse == null || !tokenResponse.containsKey("access_token")) {
+                throw new RuntimeException("Erişim token'ı alınamadı.");
+            }
 
-        IntegrationConfig config = integrationConfigRepository.findByOrganizationIdAndPlatform(
-                        organizationId, IntegrationPlatform.valueOf(registrationId.toUpperCase()))
-                .orElse(new IntegrationConfig());
+            String accessToken = (String) tokenResponse.get("access_token");
+            String refreshToken = (String) tokenResponse.get("refresh_token");
 
-        config.setOrganizationId(organizationId);
-        config.setPlatform(IntegrationPlatform.valueOf(registrationId.toUpperCase()));
-        config.setAccessToken(encryptionService.encrypt(accessToken));
-        config.setRefreshToken(refreshToken != null ? encryptionService.encrypt(refreshToken) : null);
-        config.setExpiresAt(expiresAt);
-        config.setScope(scope);
-        config.setClientId(clientRegistration.getClientId());
-        config.setClientSecret(encryptionService.encrypt(clientRegistration.getClientSecret()));
-        config.setCreatedBy(userId);
+            Long expiresInSeconds = null;
+            Object expiresInObj = tokenResponse.get("expires_in");
+            if (expiresInObj instanceof Number) {
+                expiresInSeconds = ((Number) expiresInObj).longValue();
+            } else if (expiresInObj instanceof String) {
+                try { expiresInSeconds = Long.parseLong((String) expiresInObj); } catch (NumberFormatException ignored) {}
+            }
+            Instant expiresAt = (expiresInSeconds != null) ? Instant.now().plus(expiresInSeconds, ChronoUnit.SECONDS) : null;
+            String scope = (String) tokenResponse.get("scope");
 
-        // FACEBOOK: lead formu olan sayfayı bul
-        if (registrationId.equalsIgnoreCase("facebook")) {
-            try {
-                String pagesApiUrl = "https://graph.facebook.com/v18.0/me/accounts"
-                        + "?fields=id,name,access_token&access_token=" + accessToken;
+            config.setOrganizationId(organizationId);
+            config.setPlatform(platform);
+            config.setAccessToken(encryptionService.encrypt(accessToken));
+            config.setRefreshToken(refreshToken != null ? encryptionService.encrypt(refreshToken) : null);
+            config.setExpiresAt(expiresAt);
+            config.setScope(scope);
+            config.setClientId(clientRegistration.getClientId());
+            config.setClientSecret(encryptionService.encrypt(clientRegistration.getClientSecret()));
+            config.setCreatedBy(userId);
 
-                ResponseEntity<Map> pagesResponse = restTemplate.exchange(pagesApiUrl, HttpMethod.GET, null, Map.class);
-                List<Map<String, Object>> pagesData = (List<Map<String, Object>>) pagesResponse.getBody().get("data");
+            // FACEBOOK: lead formu olan sayfayı bul
+            if (registrationId.equalsIgnoreCase("facebook")) {
+                try {
+                    String pagesApiUrl = "https://graph.facebook.com/v18.0/me/accounts"
+                            + "?fields=id,name,access_token&access_token=" + accessToken;
 
-                String selectedPageId = null;
-                if (pagesData != null) {
-                    for (Map<String, Object> pageMap : pagesData) {
-                        String pageId = (String) pageMap.get("id");
-                        String pageAccessToken = (String) pageMap.get("access_token");
-                        if (pageId == null || pageAccessToken == null) continue;
+                    ResponseEntity<Map> pagesResponse = restTemplate.exchange(pagesApiUrl, HttpMethod.GET, null, Map.class);
+                    List<Map<String, Object>> pagesData = (List<Map<String, Object>>) pagesResponse.getBody().get("data");
 
-                        // Bu sayfanın en az bir lead formu var mı?
-                        String testFormsUrl = "https://graph.facebook.com/v18.0/" + pageId
-                                + "/leadgen_forms?limit=1&access_token=" + pageAccessToken;
+                    String selectedPageId = null;
+                    if (pagesData != null) {
+                        for (Map<String, Object> pageMap : pagesData) {
+                            String pageId = (String) pageMap.get("id");
+                            String pageAccessToken = (String) pageMap.get("access_token");
+                            if (pageId == null || pageAccessToken == null) continue;
 
-                        try {
-                            ResponseEntity<Map> formsResp = restTemplate.exchange(testFormsUrl, HttpMethod.GET, null, Map.class);
-                            List<Map<String, Object>> fdata = (List<Map<String, Object>>) formsResp.getBody().get("data");
-                            if (fdata != null && !fdata.isEmpty()) {
-                                selectedPageId = pageId;
-                                logger.info("Lead formu olan Facebook sayfası bulundu: {} ({})", pageMap.get("name"), pageId);
-                                break;
+                            // Bu sayfanın en az bir lead formu var mı?
+                            String testFormsUrl = "https://graph.facebook.com/v18.0/" + pageId
+                                    + "/leadgen_forms?limit=1&access_token=" + pageAccessToken;
+
+                            try {
+                                ResponseEntity<Map> formsResp = restTemplate.exchange(testFormsUrl, HttpMethod.GET, null, Map.class);
+                                List<Map<String, Object>> fdata = (List<Map<String, Object>>) formsResp.getBody().get("data");
+                                if (fdata != null && !fdata.isEmpty()) {
+                                    selectedPageId = pageId;
+                                    logger.info("Lead formu olan Facebook sayfası bulundu: {} ({})", pageMap.get("name"), pageId);
+                                    break;
+                                }
+                            } catch (Exception inner) {
+                                logger.debug("Sayfa {} form kontrolünde hata/erişim yok: {}", pageId, inner.getMessage());
                             }
-                        } catch (Exception inner) {
-                            logger.debug("Sayfa {} form kontrolünde hata/erişim yok: {}", pageId, inner.getMessage());
                         }
                     }
-                }
 
-                if (selectedPageId != null) {
-                    config.setPlatformPageId(selectedPageId);
-                } else {
-                    logger.warn("Organizasyon {} için lead formu olan bir Facebook sayfası bulunamadı.", organizationId);
+                    if (selectedPageId != null) {
+                        config.setPlatformPageId(selectedPageId);
+                    } else {
+                        logger.warn("Organizasyon {} için lead formu olan bir Facebook sayfası bulunamadı.", organizationId);
+                    }
+                } catch (Exception e) {
+                    logger.error("Facebook sayfaları çekilirken hata: {}", e.getMessage());
                 }
-            } catch (Exception e) {
-                logger.error("Facebook sayfaları çekilirken hata: {}", e.getMessage());
             }
-        }
 
-        integrationConfigRepository.save(config);
-        logger.info("OAuth2 entegrasyonu organizasyon {} için platform {} ile başarıyla tamamlandı.", organizationId, registrationId);
+            updateConnectionStatus(config, IntegrationConnectionStatus.CONNECTED,
+                    "OAuth bağlantısı başarıyla tamamlandı.", null);
+            integrationConfigRepository.save(config);
+            logger.info("OAuth2 entegrasyonu organizasyon {} için platform {} ile başarıyla tamamlandı.", organizationId, registrationId);
+        } catch (Exception e) {
+            if (existingConfig != null) {
+                updateConnectionStatus(existingConfig, IntegrationConnectionStatus.ERROR,
+                        "OAuth callback tamamlanamadı.", e.getMessage());
+                integrationConfigRepository.save(existingConfig);
+            }
+            throw e;
+        }
     }
 
     /**
@@ -348,50 +420,57 @@ public class IntegrationService {
     public String refreshAccessToken(UUID organizationId, IntegrationPlatform platform) {
         IntegrationConfig config = integrationConfigRepository.findByOrganizationIdAndPlatform(organizationId, platform)
                 .orElseThrow(() -> new ResourceNotFoundException("Organizasyon " + organizationId + " ve platform " + platform + " için entegrasyon yapılandırması bulunamadı."));
+        try {
+            String decryptedRefreshToken = encryptionService.decrypt(config.getRefreshToken());
+            String decryptedClientSecret = encryptionService.decrypt(config.getClientSecret());
 
-        String decryptedRefreshToken = encryptionService.decrypt(config.getRefreshToken());
-        String decryptedClientSecret = encryptionService.decrypt(config.getClientSecret());
+            ClientRegistration clientRegistration = clientRegistrationRepository.findByRegistrationId(platform.name().toLowerCase());
+            if (clientRegistration == null) {
+                throw new IllegalArgumentException("Platform: " + platform.name() + " için geçersiz istemci kayıt ID'si.");
+            }
 
-        ClientRegistration clientRegistration = clientRegistrationRepository.findByRegistrationId(platform.name().toLowerCase());
-        if (clientRegistration == null) {
-            throw new IllegalArgumentException("Platform: " + platform.name() + " için geçersiz istemci kayıt ID'si.");
+            MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+            params.add("grant_type", "refresh_token");
+            params.add("client_id", clientRegistration.getClientId());
+            params.add("client_secret", decryptedClientSecret);
+            params.add("refresh_token", decryptedRefreshToken);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+            HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(params, headers);
+
+            ResponseEntity<Map> response = restTemplate.exchange(
+                    clientRegistration.getProviderDetails().getTokenUri(),
+                    HttpMethod.POST,
+                    request,
+                    Map.class
+            );
+
+            Map<String, Object> tokenResponse = response.getBody();
+            if (tokenResponse == null || !tokenResponse.containsKey("access_token")) {
+                throw new RuntimeException("Erişim token'ı yenilenemedi.");
+            }
+
+            String newAccessToken = (String) tokenResponse.get("access_token");
+            Long expiresInSeconds = ((Number) tokenResponse.get("expires_in")).longValue();
+            Instant newExpiresAt = Instant.now().plus(expiresInSeconds, ChronoUnit.SECONDS);
+            String newScope = (String) tokenResponse.get("scope"); // Scope yenilemede değişebilir
+
+            config.setAccessToken(encryptionService.encrypt(newAccessToken));
+            config.setExpiresAt(newExpiresAt);
+            config.setScope(newScope);
+            updateConnectionStatus(config, IntegrationConnectionStatus.CONNECTED,
+                    "Erişim token'ı başarıyla yenilendi.", null);
+            integrationConfigRepository.save(config);
+
+            logger.info("Organizasyon {} için platform {} erişim token'ı yenilendi.", organizationId, platform);
+            return newAccessToken;
+        } catch (Exception e) {
+            updateConnectionStatus(config, IntegrationConnectionStatus.ERROR,
+                    "Token yenileme başarısız oldu.", e.getMessage());
+            integrationConfigRepository.save(config);
+            throw e;
         }
-
-        MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
-        params.add("grant_type", "refresh_token");
-        params.add("client_id", clientRegistration.getClientId());
-        params.add("client_secret", decryptedClientSecret);
-        params.add("refresh_token", decryptedRefreshToken);
-
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
-        HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(params, headers);
-
-        ResponseEntity<Map> response = restTemplate.exchange(
-                clientRegistration.getProviderDetails().getTokenUri(),
-                HttpMethod.POST,
-                request,
-                Map.class
-        );
-
-        Map<String, Object> tokenResponse = response.getBody();
-        if (tokenResponse == null || !tokenResponse.containsKey("access_token")) {
-            throw new RuntimeException("Erişim token'ı yenilenemedi.");
-        }
-
-        String newAccessToken = (String) tokenResponse.get("access_token");
-        Long expiresInSeconds = ((Number) tokenResponse.get("expires_in")).longValue();
-        Instant newExpiresAt = Instant.now().plus(expiresInSeconds, ChronoUnit.SECONDS);
-        String newScope = (String) tokenResponse.get("scope"); // Scope yenilemede değişebilir
-
-        // Saklanan yapılandırmayı güncelle
-        config.setAccessToken(encryptionService.encrypt(newAccessToken));
-        config.setExpiresAt(newExpiresAt);
-        config.setScope(newScope);
-        integrationConfigRepository.save(config);
-
-        logger.info("Organizasyon {} için platform {} erişim token'ı yenilendi.", organizationId, platform);
-        return newAccessToken;
     }
 
 
@@ -411,9 +490,10 @@ public class IntegrationService {
         int updatedCount = 0;
         List<Lead> result = new ArrayList<>();
 
+        IntegrationConfig config = null;
         try {
             logger.info("Organizasyon {} için Google Lead'leri çekilmeye çalışılıyor.", organizationId);
-            IntegrationConfig config = integrationConfigRepository.findByOrganizationIdAndPlatform(
+            config = integrationConfigRepository.findByOrganizationIdAndPlatform(
                             organizationId, IntegrationPlatform.GOOGLE)
                     .orElseThrow(() -> new ResourceNotFoundException("Google entegrasyonu bu organizasyon için yapılandırılmadı."));
 
@@ -514,12 +594,26 @@ public class IntegrationService {
             runLog.setTotalFetched(result.size());
             runLog.setNewCreated(createdCount);
             runLog.setUpdated(updatedCount);
+
+            if (config != null) {
+                config.setLastSyncedAt(Instant.now());
+                updateConnectionStatus(config, IntegrationConnectionStatus.CONNECTED,
+                        String.format("Google lead senkronizasyonu tamamlandı (yeni: %d, güncellenen: %d)",
+                                createdCount, updatedCount), null);
+                integrationConfigRepository.save(config);
+            }
+
             logger.info("Google entegrasyonu tamamlandı: fetched={}, created={}, updated={}",
                     result.size(), createdCount, updatedCount);
 
         } catch (Exception e) {
             logger.error("Google Lead çekme hatası: {}", e.getMessage(), e);
             runLog.setErrorMessage(e.getMessage());
+            if (config != null) {
+                updateConnectionStatus(config, IntegrationConnectionStatus.ERROR,
+                        "Google lead senkronizasyonu başarısız oldu.", e.getMessage());
+                integrationConfigRepository.save(config);
+            }
         } finally {
             runLog.setFinishedAt(Instant.now());
             integrationLogRepository.save(runLog);
@@ -545,8 +639,9 @@ public class IntegrationService {
         int updatedCount = 0;
         List<Lead> result = new ArrayList<>();
 
+        IntegrationConfig config = null;
         try {
-            IntegrationConfig config = integrationConfigRepository
+            config = integrationConfigRepository
                     .findByOrganizationIdAndPlatform(organizationId, IntegrationPlatform.FACEBOOK)
                     .orElseThrow(() -> new ResourceNotFoundException("Facebook entegrasyonu yok."));
 
@@ -693,6 +788,10 @@ public class IntegrationService {
                 config.setLastLeadCreatedTime(latestFetchedLeadCreatedAt);
             }
 
+            updateConnectionStatus(config, IntegrationConnectionStatus.CONNECTED,
+                    String.format("Facebook lead senkronizasyonu tamamlandı (yeni: %d, güncellenen: %d)",
+                            createdCount, updatedCount), null);
+
             integrationConfigRepository.save(config);
 
             logger.info("Facebook entegrasyonu tamamlandı: fetched={}, created={}, updated={}",
@@ -700,6 +799,11 @@ public class IntegrationService {
         } catch (Exception e) {
             logger.error("Facebook entegrasyonu hata verdi: {}", e.getMessage(), e);
             runLog.setErrorMessage(e.getMessage());
+            if (config != null) {
+                updateConnectionStatus(config, IntegrationConnectionStatus.ERROR,
+                        "Facebook lead senkronizasyonu başarısız oldu.", e.getMessage());
+                integrationConfigRepository.save(config);
+            }
         } finally {
             runLog.setFinishedAt(Instant.now());
             integrationLogRepository.save(runLog);
