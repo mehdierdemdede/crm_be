@@ -2,6 +2,7 @@ package com.leadsyncpro.model;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.ColumnDefault;
 import org.hibernate.annotations.GenericGenerator;
 
 import java.time.Instant;
@@ -80,7 +81,8 @@ public class IntegrationConfig {
     private Instant pageTokenUpdatedAt;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "connection_status", nullable = false, length = 40)
+    @Column(name = "connection_status", nullable = false, length = 40, columnDefinition = "varchar(40) default 'DISCONNECTED'")
+    @ColumnDefault("'DISCONNECTED'")
     @Builder.Default
     private IntegrationConnectionStatus connectionStatus = IntegrationConnectionStatus.DISCONNECTED;
 
@@ -105,5 +107,8 @@ public class IntegrationConfig {
     @PreUpdate
     protected void onUpdate() {
         updatedAt = Instant.now();
+        if (connectionStatus == null) {
+            connectionStatus = IntegrationConnectionStatus.DISCONNECTED;
+        }
     }
 }
