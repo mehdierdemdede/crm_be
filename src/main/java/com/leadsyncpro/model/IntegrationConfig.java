@@ -1,8 +1,9 @@
 package com.leadsyncpro.model;
 
+import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.GenericGenerator;
-import jakarta.persistence.*;
+
 import java.time.Instant;
 import java.util.UUID;
 
@@ -78,10 +79,27 @@ public class IntegrationConfig {
     @Column(name = "page_token_updated_at")
     private Instant pageTokenUpdatedAt;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "connection_status", nullable = false, length = 40)
+    @Builder.Default
+    private IntegrationConnectionStatus connectionStatus = IntegrationConnectionStatus.DISCONNECTED;
+
+    @Column(name = "status_message", columnDefinition = "TEXT")
+    private String statusMessage;
+
+    @Column(name = "last_error_at")
+    private Instant lastErrorAt;
+
+    @Column(name = "last_error_message", columnDefinition = "TEXT")
+    private String lastErrorMessage;
+
     @PrePersist
     protected void onCreate() {
         createdAt = Instant.now();
         updatedAt = Instant.now();
+        if (connectionStatus == null) {
+            connectionStatus = IntegrationConnectionStatus.DISCONNECTED;
+        }
     }
 
     @PreUpdate

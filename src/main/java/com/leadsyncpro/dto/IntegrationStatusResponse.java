@@ -1,5 +1,6 @@
 package com.leadsyncpro.dto;
 
+import com.leadsyncpro.model.IntegrationConnectionStatus;
 import com.leadsyncpro.model.IntegrationPlatform;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -19,4 +20,9 @@ public class IntegrationStatusResponse {
     private Instant expiresAt;
     private Instant lastSyncedAt;
     private String platformPageId;
+    private IntegrationConnectionStatus status;
+    private String statusMessage;
+    private Instant lastErrorAt;
+    private String lastErrorMessage;
+    private boolean requiresAction;
 }
