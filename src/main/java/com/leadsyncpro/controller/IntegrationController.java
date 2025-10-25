@@ -14,6 +14,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.util.HtmlUtils;
 
 import java.util.List;
@@ -41,11 +42,10 @@ public class IntegrationController {
     @GetMapping("/oauth2/authorize/{registrationId}")
     @PreAuthorize("hasAuthority('SUPER_ADMIN')")
     public ResponseEntity<String> authorizeIntegration(@PathVariable String registrationId,
-                                                       @AuthenticationPrincipal UserPrincipal currentUser) {
-        UUID organizationId = currentUser.getOrganizationId();
-        if (organizationId == null) {
-            throw new IllegalArgumentException("Super Admin must specify an organization to integrate.");
-        }
+                                                       @AuthenticationPrincipal UserPrincipal currentUser,
+                                                       @RequestParam(value = "organizationId", required = false)
+                                                       UUID organizationIdParam) {
+        UUID organizationId = resolveOrganizationId(currentUser, organizationIdParam);
         String authorizationUrl = integrationService.getAuthorizationUrl(registrationId, organizationId, currentUser.getId());
         return ResponseEntity.ok(authorizationUrl);
     }
@@ -186,11 +186,10 @@ public class IntegrationController {
     @GetMapping("/{platform}")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'SUPER_ADMIN')")
     public ResponseEntity<IntegrationConfig> getIntegration(@PathVariable String platform,
-                                                            @AuthenticationPrincipal UserPrincipal currentUser) {
-        UUID organizationId = currentUser.getOrganizationId();
-        if (currentUser.getRole() == Role.SUPER_ADMIN && organizationId == null) {
-            throw new IllegalArgumentException("Super Admin must specify organization ID to retrieve integration config.");
-        }
+                                                            @AuthenticationPrincipal UserPrincipal currentUser,
+                                                            @RequestParam(value = "organizationId", required = false)
+                                                            UUID organizationIdParam) {
+        UUID organizationId = resolveOrganizationId(currentUser, organizationIdParam);
 
         IntegrationPlatform integrationPlatform = IntegrationPlatform.valueOf(platform.toUpperCase());
         IntegrationConfig config = integrationService.getIntegrationConfig(organizationId, integrationPlatform)
@@ -201,12 +200,10 @@ public class IntegrationController {
     @GetMapping("/status")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'SUPER_ADMIN')")
     public ResponseEntity<List<IntegrationStatusResponse>> getIntegrationStatuses(
-            @AuthenticationPrincipal UserPrincipal currentUser) {
+            @AuthenticationPrincipal UserPrincipal currentUser,
+            @RequestParam(value = "organizationId", required = false) UUID organizationIdParam) {
 
-        UUID organizationId = currentUser.getOrganizationId();
-        if (currentUser.getRole() == Role.SUPER_ADMIN && organizationId == null) {
-            throw new IllegalArgumentException("Super Admin must specify organization ID to retrieve integration config.");
-        }
+        UUID organizationId = resolveOrganizationId(currentUser, organizationIdParam);
 
         List<IntegrationStatusResponse> statuses = integrationService.getIntegrationStatuses(organizationId);
         return ResponseEntity.ok(statuses);
@@ -215,11 +212,10 @@ public class IntegrationController {
     @DeleteMapping("/{platform}")
     @PreAuthorize("hasAuthority('SUPER_ADMIN')")
     public ResponseEntity<Void> deleteIntegration(@PathVariable String platform,
-                                                  @AuthenticationPrincipal UserPrincipal currentUser) {
-        UUID organizationId = currentUser.getOrganizationId();
-        if (currentUser.getRole() == Role.SUPER_ADMIN && organizationId == null) {
-            throw new IllegalArgumentException("Super Admin must specify organization ID to delete integration config.");
-        }
+                                                  @AuthenticationPrincipal UserPrincipal currentUser,
+                                                  @RequestParam(value = "organizationId", required = false)
+                                                  UUID organizationIdParam) {
+        UUID organizationId = resolveOrganizationId(currentUser, organizationIdParam);
 
         IntegrationPlatform integrationPlatform = IntegrationPlatform.valueOf(platform.toUpperCase());
         integrationService.deleteIntegrationConfig(organizationId, integrationPlatform);
@@ -229,11 +225,10 @@ public class IntegrationController {
     @PostMapping("/fetch-leads/{platform}")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'SUPER_ADMIN')")
     public ResponseEntity<LeadSyncResult> fetchLeadsManually(@PathVariable String platform,
-                                                             @AuthenticationPrincipal UserPrincipal currentUser) {
-        UUID organizationId = currentUser.getOrganizationId();
-        if (currentUser.getRole() == Role.SUPER_ADMIN && organizationId == null) {
-            throw new IllegalArgumentException("Super Admin must specify organization ID to fetch leads.");
-        }
+                                                             @AuthenticationPrincipal UserPrincipal currentUser,
+                                                             @RequestParam(value = "organizationId", required = false)
+                                                             UUID organizationIdParam) {
+        UUID organizationId = resolveOrganizationId(currentUser, organizationIdParam);
 
         IntegrationPlatform integrationPlatform = IntegrationPlatform.valueOf(platform.toUpperCase());
         LeadSyncResult result;
@@ -255,9 +250,10 @@ public class IntegrationController {
     @PreAuthorize("hasAnyAuthority('ADMIN', 'SUPER_ADMIN')")
     public ResponseEntity<List<IntegrationLog>> getIntegrationLogs(
             @RequestParam(required = false) String platform,
-            @AuthenticationPrincipal UserPrincipal currentUser) {
+            @AuthenticationPrincipal UserPrincipal currentUser,
+            @RequestParam(value = "organizationId", required = false) UUID organizationIdParam) {
 
-        UUID organizationId = currentUser.getOrganizationId();
+        UUID organizationId = resolveOrganizationId(currentUser, organizationIdParam);
         List<IntegrationLog> logs;
 
         if (platform != null && !platform.isBlank()) {
@@ -273,5 +269,30 @@ public class IntegrationController {
         }
 
         return ResponseEntity.ok(logs);
+    }
+
+    private UUID resolveOrganizationId(UserPrincipal currentUser, UUID requestedOrganizationId) {
+        UUID organizationId = currentUser.getOrganizationId();
+
+        if (currentUser.getRole() == Role.SUPER_ADMIN) {
+            UUID effectiveId = requestedOrganizationId != null ? requestedOrganizationId : organizationId;
+            if (effectiveId == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Super Admin must specify organizationId via query parameter or within the token.");
+            }
+            return effectiveId;
+        }
+
+        if (organizationId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Organization information is missing for the current user.");
+        }
+
+        if (requestedOrganizationId != null && !organizationId.equals(requestedOrganizationId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "You are not authorized to access data for the requested organization.");
+        }
+
+        return organizationId;
     }
 }
