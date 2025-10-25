@@ -77,24 +77,29 @@ public class LeadService {
                     .filter(u -> u.getOrganizationId().equals(organizationId))
                     .orElseThrow(() -> new ResourceNotFoundException("Assigned user not found or access denied."));
             lead.setAssignedToUser(assignedUser);
+        }
+
+        Lead saved = leadRepository.save(lead);
+
+        if (saved.getAssignedToUser() != null) {
+            User assignedUser = saved.getAssignedToUser();
 
             // ✅ E-posta bildirimi
             try {
                 mailService.sendLeadAssignedEmail(
                         assignedUser.getEmail(),
                         assignedUser.getFirstName(),
-                        lead.getName(),
-                        lead.getCampaign() != null ? lead.getCampaign().getName() : null,
-                        lead.getLanguage(),
-                        lead.getStatus().name(),
-                        lead.getId().toString()
+                        saved.getName(),
+                        saved.getCampaign() != null ? saved.getCampaign().getName() : null,
+                        saved.getLanguage(),
+                        saved.getStatus().name(),
+                        saved.getId().toString()
                 );
             } catch (Exception e) {
                 logger.warn("Lead atama bildirimi gönderilemedi: {}", e.getMessage());
             }
         }
 
-        Lead saved = leadRepository.save(lead);
         autoAssignService.assignLeadAutomatically(saved);
         logger.info("Yeni lead oluşturuldu: {} ({})", saved.getId(), saved.getName());
         return saved;
@@ -482,7 +487,10 @@ public class LeadService {
             // leadId -> ilk log zamanı
             Map<UUID, Instant> firstLogPerLead = new HashMap<>();
             for (LeadStatusLog log : logs) {
-                firstLogPerLead.putIfAbsent(log.getId() != null ? log.getLeadId() : null, log.getCreatedAt());
+                UUID leadId = log.getLeadId();
+                if (leadId != null) {
+                    firstLogPerLead.putIfAbsent(leadId, log.getCreatedAt());
+                }
             }
 
             long sumMinutes = 0;
