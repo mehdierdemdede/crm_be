@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -195,29 +196,48 @@ public class LeadService {
     }
 
     public Page<Lead> getLeadsByOrganizationPaged(UUID organizationId,
-                                                  String campaign,
+                                                  String search,
                                                   String status,
-                                                  UUID assigneeId,
+                                                  String language,
+                                                  String campaignId,
+                                                  UUID assignedUserId,
+                                                  Boolean unassigned,
                                                   Pageable pageable) {
-        LeadStatus statusEnum = null;
+        Specification<Lead> specification = LeadSpecifications.belongsToOrganization(organizationId);
+
+        if (search != null && !search.isBlank()) {
+            specification = specification.and(LeadSpecifications.matchesSearch(search));
+        }
 
         if (status != null && !status.isBlank()) {
             try {
-                statusEnum = LeadStatus.valueOf(status.trim().toUpperCase());
+                LeadStatus statusEnum = LeadStatus.valueOf(status.trim().toUpperCase());
+                specification = specification.and(LeadSpecifications.hasStatus(statusEnum));
             } catch (IllegalArgumentException ignored) {
-                // Geçersiz bir status değeri gelirse, filtreleme yapılmaz
-                statusEnum = null;
+                // Geçersiz status değeri filtrelenmez
             }
         }
 
-        // 🧩 Null-safe sorgu çağrısı
-        return leadRepository.findByOrganizationIdAndOptionalFilters(
-                organizationId,
-                (campaign != null && !campaign.isBlank()) ? campaign.trim() : null,
-                statusEnum,
-                assigneeId,
-                pageable
-        );
+        if (language != null && !language.isBlank()) {
+            specification = specification.and(LeadSpecifications.hasLanguage(language));
+        }
+
+        if (campaignId != null && !campaignId.isBlank()) {
+            try {
+                UUID campaignUuid = UUID.fromString(campaignId.trim());
+                specification = specification.and(LeadSpecifications.hasCampaignId(campaignUuid));
+            } catch (IllegalArgumentException ignored) {
+                // Geçersiz campaignId filtrelenmez
+            }
+        }
+
+        if (Boolean.TRUE.equals(unassigned)) {
+            specification = specification.and(LeadSpecifications.isUnassigned());
+        } else if (assignedUserId != null) {
+            specification = specification.and(LeadSpecifications.hasAssignedUser(assignedUserId));
+        }
+
+        return leadRepository.findAll(specification, pageable);
     }
 
 
