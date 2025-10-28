@@ -5,6 +5,7 @@ import com.leadsyncpro.model.LeadActivityLog;
 import com.leadsyncpro.repository.LeadActivityLogRepository;
 import com.leadsyncpro.repository.LeadRepository;
 import com.leadsyncpro.exception.ResourceNotFoundException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,9 +25,13 @@ public class LeadActivityLogService {
     }
 
     @Transactional
-    public LeadActivityLog addLog(UUID leadId, UUID userId, LeadLogRequest request) {
+    public LeadActivityLog addLog(UUID leadId, UUID organizationId, UUID userId, LeadLogRequest request) {
         var lead = leadRepository.findById(leadId)
                 .orElseThrow(() -> new ResourceNotFoundException("Lead not found"));
+
+        if (!lead.getOrganizationId().equals(organizationId)) {
+            throw new AccessDeniedException("Lead not accessible for this organization");
+        }
 
         LeadActivityLog log = new LeadActivityLog();
         log.setLead(lead);
@@ -38,7 +43,14 @@ public class LeadActivityLogService {
         return leadActivityLogRepository.save(log);
     }
 
-    public List<LeadActivityLog> getLogs(UUID leadId) {
+    public List<LeadActivityLog> getLogs(UUID leadId, UUID organizationId) {
+        var lead = leadRepository.findById(leadId)
+                .orElseThrow(() -> new ResourceNotFoundException("Lead not found"));
+
+        if (!lead.getOrganizationId().equals(organizationId)) {
+            throw new AccessDeniedException("Lead not accessible for this organization");
+        }
+
         return leadActivityLogRepository.findByLeadIdOrderByCreatedAtDesc(leadId);
     }
 }
