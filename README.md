@@ -31,3 +31,18 @@ Content-Type: application/json
 > ℹ️ Only `ADMIN` and `SUPER_ADMIN` roles can trigger this sync. The request uses the organization ID resolved from the authenticated user, so no additional parameters are required from the frontend.
 
 Behind the scenes the backend automatically refreshes the page access token when needed, persists the latest Facebook lead timestamp per organization, and skips older leads that were already synchronized. Each run is also logged to the `integration_logs` table so the history can be displayed from the reporting screens.
+
+## Bootstrap a global SUPER_ADMIN
+
+After resetting PostgreSQL you can restore the global control user by either letting Flyway run the `V3__seed_global_super_admin.sql` migration or by executing the helper script manually:
+
+```sql
+\i docs/sql/seed_super_admin.sql
+```
+
+Both approaches ensure the `pgcrypto` extension is available and hash the password `password` with bcrypt on the server before inserting the row. The default credentials are:
+
+- **Email:** `super.admin@global.local`
+- **Password:** `password`
+
+The user is created under the `Global Control` organization (`11111111-2222-3333-4444-555555555555`). You can change these constants in the script/migration if you need a different bootstrap setup.

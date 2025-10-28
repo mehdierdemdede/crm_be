@@ -267,6 +267,17 @@ public class LeadService {
         return mapToLeadResponse(savedLead);
     }
 
+    public List<LeadStatusLog> getLeadStatusLogs(UUID leadId, UUID organizationId) {
+        Lead lead = leadRepository.findById(leadId)
+                .orElseThrow(() -> new ResourceNotFoundException("Lead not found: " + leadId));
+
+        if (!lead.getOrganizationId().equals(organizationId)) {
+            throw new SecurityException("Access denied: Lead does not belong to this organization.");
+        }
+
+        return leadStatusLogRepository.findByLeadIdOrderByCreatedAtDesc(leadId);
+    }
+
     private LeadResponse mapToLeadResponse(Lead lead) {
         Optional<Sale> lastSale = salesRepository
                 .findTopByLead_IdAndOrganizationIdOrderByCreatedAtDesc(lead.getId(), lead.getOrganizationId());
