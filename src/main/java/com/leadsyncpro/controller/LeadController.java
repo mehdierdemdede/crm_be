@@ -47,13 +47,23 @@ public class LeadController {
     @PreAuthorize("hasAnyAuthority('ADMIN', 'USER', 'SUPER_ADMIN')")
     public ResponseEntity<Page<Lead>> getAllLeads(
             @AuthenticationPrincipal UserPrincipal currentUser,
-            @RequestParam(required = false) String campaign,
+            @RequestParam(required = false) String search,
             @RequestParam(required = false) String status,
-            @RequestParam(required = false) UUID assigneeId,
+            @RequestParam(required = false) String language,
+            @RequestParam(required = false) String campaignId,
+            @RequestParam(required = false) UUID assignedUserId,
+            @RequestParam(required = false) Boolean unassigned,
             Pageable pageable // ✅ pagination + sorting otomatik
     ) {
         Page<Lead> leads = leadService.getLeadsByOrganizationPaged(
-                currentUser.getOrganizationId(), campaign, status, assigneeId, pageable);
+                currentUser.getOrganizationId(),
+                search,
+                status,
+                language,
+                campaignId,
+                assignedUserId,
+                unassigned,
+                pageable);
         return ResponseEntity.ok(leads);
     }
 
