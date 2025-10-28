@@ -27,6 +27,7 @@ import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
+import java.text.Normalizer;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
@@ -72,6 +73,98 @@ public class IntegrationService {
         }
         return null;
     }
+
+    private static String normalizeFieldKey(String key) {
+        if (key == null) {
+            return null;
+        }
+        String normalized = Normalizer.normalize(key, Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "");
+        normalized = normalized.toLowerCase(Locale.ROOT)
+                .replaceAll("[^a-z0-9]", "");
+        return normalized;
+    }
+
+    private static boolean containsAnyToken(String value, String... tokens) {
+        if (value == null) {
+            return false;
+        }
+        for (String token : tokens) {
+            if (token != null && !token.isEmpty() && value.contains(token)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean containsAllTokens(String value, String... tokens) {
+        if (value == null) {
+            return false;
+        }
+        for (String token : tokens) {
+            if (token == null || token.isEmpty() || !value.contains(token)) {
+                return false;
+            }
+        }
+        return tokens.length > 0;
+    }
+
+    private static boolean isNameFieldKey(String normalizedKey) {
+        if (normalizedKey == null || normalizedKey.isEmpty()) {
+            return false;
+        }
+        if (containsAnyToken(normalizedKey, "company", "firma", "entreprise")) {
+            return false;
+        }
+        if (containsAnyToken(normalizedKey, "fullname", "contactname")) {
+            return true;
+        }
+        if (normalizedKey.equals("name") || normalizedKey.endsWith("name")) {
+            return true;
+        }
+        if (containsAllTokens(normalizedKey, "prenom", "nom")
+                || containsAllTokens(normalizedKey, "first", "last", "name")) {
+            return true;
+        }
+        return false;
+    }
+
+    private static boolean isFirstNameFieldKey(String normalizedKey) {
+        if (normalizedKey == null) {
+            return false;
+        }
+        return containsAnyToken(normalizedKey,
+                "firstname", "givenname", "forename", "prenom", "vorname", "firstnamefield");
+    }
+
+    private static boolean isLastNameFieldKey(String normalizedKey) {
+        if (normalizedKey == null) {
+            return false;
+        }
+        if (containsAnyToken(normalizedKey, "lastname", "surname", "familyname", "achternaam", "nachname")) {
+            return true;
+        }
+        return normalizedKey.contains("nom") && !normalizedKey.contains("prenom");
+    }
+
+    private static boolean isEmailFieldKey(String normalizedKey) {
+        if (normalizedKey == null) {
+            return false;
+        }
+        if (normalizedKey.contains("email") || normalizedKey.contains("courriel")) {
+            return true;
+        }
+        return normalizedKey.endsWith("mailaddress");
+    }
+
+    private static boolean isPhoneFieldKey(String normalizedKey) {
+        if (normalizedKey == null) {
+            return false;
+        }
+        return containsAnyToken(normalizedKey,
+                "phone", "tel", "telefon", "telefono", "gsm", "mobile", "whatsapp", "cell", "cel");
+    }
+
     @SuppressWarnings("unchecked")
     private static String nextUrl(Map body) {
         if (body == null) return null;
@@ -858,32 +951,95 @@ public class IntegrationService {
         String createdTimeStr = asString(fbLead.get("created_time"));
         Instant platformCreatedAt = parseInstant(createdTimeStr);
 
-        // field_data parse
-        String name = null, email = null, phone = null;
+        boolean hasExistingName = !isBlank(lead.getName());
+        String name = null;
+        String email = null;
+        String phone = null;
+        String firstName = null;
+        String lastName = null;
         Map<String, String> extraFields = new LinkedHashMap<>();
         Object fdObj = fbLead.get("field_data");
         if (fdObj instanceof List) {
-            for (Map<String,Object> f : (List<Map<String,Object>>) fdObj) {
+            for (Map<String, Object> f : (List<Map<String, Object>>) fdObj) {
                 String fname = asString(f.get("name"));
-                String fval  = firstValue(f.get("values"));
-                if (fname == null) continue;
-                switch (fname.toLowerCase()) {
-                    case "full_name":
-                    case "name":        name  = fval; break;
-                    case "email":       email = fval; break;
-                    case "phone":
-                    case "phone_number":phone = fval; break;
-                    default:
-                        if (fval != null) {
-                            extraFields.put(fname, fval);
-                        }
+                String fval = firstValue(f.get("values"));
+                if (fname == null) {
+                    continue;
+                }
+                String normalized = normalizeFieldKey(fname);
+
+                if (!isBlank(fval) && isNameFieldKey(normalized)) {
+                    name = fval;
+                    continue;
+                }
+                if (!isBlank(fval) && isFirstNameFieldKey(normalized)) {
+                    firstName = fval;
+                    continue;
+                }
+                if (!isBlank(fval) && isLastNameFieldKey(normalized)) {
+                    lastName = fval;
+                    continue;
+                }
+                if (!isBlank(fval) && isEmailFieldKey(normalized)) {
+                    email = fval;
+                    continue;
+                }
+                if (!isBlank(fval) && isPhoneFieldKey(normalized)) {
+                    phone = fval;
+                    continue;
+                }
+
+                if (fval != null) {
+                    extraFields.put(fname, fval);
                 }
             }
         }
 
-        if (name != null) lead.setName(name);
-        if (email != null) lead.setEmail(email);
-        if (phone != null) lead.setPhone(phone);
+        if (isBlank(name) && (!isBlank(firstName) || !isBlank(lastName))) {
+            StringBuilder sb = new StringBuilder();
+            if (!isBlank(firstName)) {
+                sb.append(firstName.trim());
+            }
+            if (!isBlank(lastName)) {
+                if (sb.length() > 0) {
+                    sb.append(' ');
+                }
+                sb.append(lastName.trim());
+            }
+            name = sb.toString().trim();
+        }
+
+        if (isBlank(name)) {
+            for (Map.Entry<String, String> entry : extraFields.entrySet()) {
+                String normalized = normalizeFieldKey(entry.getKey());
+                if (isNameFieldKey(normalized) && !isBlank(entry.getValue())) {
+                    name = entry.getValue();
+                    break;
+                }
+            }
+        }
+
+        if (isBlank(name) && !hasExistingName) {
+            if (!isBlank(email)) {
+                name = email;
+            } else if (!isBlank(phone)) {
+                name = phone;
+            } else {
+                String sourceId = lead.getSourceLeadId();
+                name = sourceId != null ? "Facebook Lead " + sourceId : "Facebook Lead";
+            }
+        }
+
+        if (!isBlank(name)) {
+            lead.setName(name);
+        }
+
+        if (!isBlank(email)) {
+            lead.setEmail(email);
+        }
+        if (!isBlank(phone)) {
+            lead.setPhone(phone);
+        }
 
         if (!extraFields.isEmpty()) {
             try {
