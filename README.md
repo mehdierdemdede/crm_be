@@ -32,6 +32,10 @@ Content-Type: application/json
 
 Behind the scenes the backend automatically refreshes the page access token when needed, persists the latest Facebook lead timestamp per organization, and skips older leads that were already synchronized. Each run is also logged to the `integration_logs` table so the history can be displayed from the reporting screens.
 
+## Configuring frontend origins
+
+Set `app.cors.allowed-origins` in `application.properties` (or via environment variables) to a comma-separated list of frontend URLs that should be able to call the backend. The default value is `http://localhost:3000` for local development.
+
 ## Bootstrap a global SUPER_ADMIN
 
 After resetting PostgreSQL you can restore the global control user by either letting Flyway run the `V3__seed_global_super_admin.sql` migration or by executing the helper script manually:
