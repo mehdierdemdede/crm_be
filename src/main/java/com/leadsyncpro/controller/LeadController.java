@@ -5,7 +5,6 @@ import com.leadsyncpro.model.Lead;
 import com.leadsyncpro.model.LeadActivityLog;
 import com.leadsyncpro.model.LeadStatus;
 import com.leadsyncpro.model.LeadStatusLog;
-import com.leadsyncpro.repository.LeadStatusLogRepository;
 import com.leadsyncpro.security.UserPrincipal;
 import com.leadsyncpro.service.LeadActionService;
 import com.leadsyncpro.service.LeadActivityLogService;
@@ -28,17 +27,14 @@ import java.util.UUID;
 public class LeadController {
 
     private final LeadService leadService;
-    private final LeadStatusLogRepository leadStatusLogRepository;
     private final LeadActionService leadActionService;
     private final LeadActivityLogService leadActivityLogService;
 
     public LeadController(
             LeadService leadService,
-            LeadStatusLogRepository leadStatusLogRepository,
             LeadActionService leadActionService,
             LeadActivityLogService leadActivityLogService) {
         this.leadService = leadService;
-        this.leadStatusLogRepository = leadStatusLogRepository;
         this.leadActionService = leadActionService;
         this.leadActivityLogService = leadActivityLogService;
     }
@@ -121,8 +117,9 @@ public class LeadController {
 
     @GetMapping("/{leadId}/status-logs")
     @PreAuthorize("hasAnyAuthority('USER', 'ADMIN', 'SUPER_ADMIN')")
-    public ResponseEntity<List<LeadStatusLog>> getLeadStatusLogs(@PathVariable UUID leadId) {
-        List<LeadStatusLog> logs = leadStatusLogRepository.findByLeadIdOrderByCreatedAtDesc(leadId);
+    public ResponseEntity<List<LeadStatusLog>> getLeadStatusLogs(@PathVariable UUID leadId,
+                                                                 @AuthenticationPrincipal UserPrincipal currentUser) {
+        List<LeadStatusLog> logs = leadService.getLeadStatusLogs(leadId, currentUser.getOrganizationId());
         if (logs.isEmpty()) return ResponseEntity.noContent().build();
         return ResponseEntity.ok(logs);
     }
@@ -160,14 +157,15 @@ public class LeadController {
     public ResponseEntity<LeadActivityLog> addActivityLog(@PathVariable UUID leadId,
                                                           @RequestBody LeadLogRequest req,
                                                           @AuthenticationPrincipal UserPrincipal currentUser) {
-        LeadActivityLog log = leadActivityLogService.addLog(leadId, currentUser.getId(), req);
+        LeadActivityLog log = leadActivityLogService.addLog(leadId, currentUser.getOrganizationId(), currentUser.getId(), req);
         return ResponseEntity.ok(log);
     }
 
     @GetMapping("/{leadId}/activity-logs")
     @PreAuthorize("hasAnyAuthority('USER','ADMIN','SUPER_ADMIN')")
-    public ResponseEntity<List<LeadActivityLog>> getActivityLogs(@PathVariable UUID leadId) {
-        return ResponseEntity.ok(leadActivityLogService.getLogs(leadId));
+    public ResponseEntity<List<LeadActivityLog>> getActivityLogs(@PathVariable UUID leadId,
+                                                                 @AuthenticationPrincipal UserPrincipal currentUser) {
+        return ResponseEntity.ok(leadActivityLogService.getLogs(leadId, currentUser.getOrganizationId()));
     }
 
     @PatchMapping("/{id}/assign")
