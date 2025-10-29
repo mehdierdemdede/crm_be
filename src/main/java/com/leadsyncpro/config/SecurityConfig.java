@@ -92,6 +92,7 @@ public class SecurityConfig {
                         .requestMatchers("/error").permitAll()
                         .requestMatchers("/favicon.ico").permitAll()
                         .requestMatchers("/api/organizations/**").hasAuthority("SUPER_ADMIN")
+                        .requestMatchers("/api/languages/**").hasAnyAuthority("SUPER_ADMIN", "ADMIN")
                         .anyRequest().authenticated()
                 );
 
