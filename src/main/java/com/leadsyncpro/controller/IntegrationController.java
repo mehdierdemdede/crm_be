@@ -17,11 +17,17 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.util.HtmlUtils;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -63,7 +69,7 @@ public class IntegrationController {
             return buildPopupErrorPage("OAuth2 işlemi tamamlanamadı", error);
         }
 
-        if (code == null || state == null) {
+        if (!StringUtils.hasText(code) || !StringUtils.hasText(state)) {
             return buildPopupErrorPage("Eksik OAuth2 parametreleri", "code veya state değeri bulunamadı.");
         }
 
@@ -73,107 +79,6 @@ public class IntegrationController {
         } catch (Exception e) {
             return buildPopupErrorPage("Entegrasyon sırasında hata oluştu", e.getMessage());
         }
-    }
-
-    private ResponseEntity<String> buildPopupSuccessPage(String message) {
-        String redirectUrl = frontendSuccessRedirectUrl == null ? "#" : frontendSuccessRedirectUrl;
-        String escapedMessage = HtmlUtils.htmlEscape(message == null ? "" : message);
-        String html = "<!DOCTYPE html>" +
-                "<html lang=\"tr\">" +
-                "<head>" +
-                "  <meta charset=\"UTF-8\" />" +
-                "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />" +
-                "  <title>Facebook Entegrasyonu</title>" +
-                "  <style>" +
-                "    body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #f5f7fb; color: #1f2937; margin: 0; padding: 32px; display: flex; align-items: center; justify-content: center; height: 100vh; }" +
-                "    .card { background: #ffffff; border-radius: 16px; box-shadow: 0 20px 45px -20px rgba(15, 23, 42, 0.35); padding: 32px 40px; max-width: 420px; text-align: center; }" +
-                "    .card h1 { font-size: 24px; margin-bottom: 12px; color: #047857; }" +
-                "    .card p { font-size: 16px; line-height: 1.5; margin-bottom: 0; }" +
-                "    .status-badge { display: inline-flex; align-items: center; justify-content: center; padding: 8px 16px; border-radius: 999px; font-weight: 600; background: rgba(16, 185, 129, 0.15); color: #047857; margin-bottom: 20px; letter-spacing: 0.4px; text-transform: uppercase; font-size: 12px; }" +
-                "    .fallback { margin-top: 24px; font-size: 14px; color: #6b7280; }" +
-                "    a { color: #2563eb; text-decoration: none; font-weight: 600; }" +
-                "    a:hover { text-decoration: underline; }" +
-                "  </style>" +
-                "</head>" +
-                "<body>" +
-                "  <div class=\"card\">" +
-                "    <div class=\"status-badge\">Bağlantı tamamlandı</div>" +
-                "    <h1>Facebook bağlantısı başarılı!</h1>" +
-                "    <p>" + escapedMessage + "</p>" +
-                "    <p class=\"fallback\">Bu pencere otomatik kapanmazsa <a href=\"" + HtmlUtils.htmlEscape(redirectUrl) + "\">buraya tıklayın</a>.</p>" +
-                "  </div>" +
-                "  <script>" +
-                "    const payload = { source: 'crm-pro-oauth', status: 'success', redirectUrl: '" + escapeForJsString(redirectUrl) + "' };" +
-                "    function closeWindow() { window.close(); }" +
-                "    if (window.opener && !window.opener.closed) {" +
-                "      window.opener.postMessage(payload, '*');" +
-                "      setTimeout(closeWindow, 900);" +
-                "    } else {" +
-                "      if (payload.redirectUrl) { setTimeout(function () { window.location.href = payload.redirectUrl; }, 1500); }" +
-                "    }" +
-                "  </script>" +
-                "</body>" +
-                "</html>";
-        return ResponseEntity.ok()
-                .contentType(MediaType.TEXT_HTML)
-                .body(html);
-    }
-
-    private ResponseEntity<String> buildPopupErrorPage(String title, String errorMessage) {
-        String redirectUrl = frontendErrorRedirectUrl == null ? "" : frontendErrorRedirectUrl;
-        String escapedTitle = HtmlUtils.htmlEscape(title == null ? "Hata oluştu" : title);
-        String rawMessage = errorMessage == null ? "Bilinmeyen bir hata oluştu." : errorMessage;
-        String escapedMessage = HtmlUtils.htmlEscape(rawMessage);
-        String html = "<!DOCTYPE html>" +
-                "<html lang=\"tr\">" +
-                "<head>" +
-                "  <meta charset=\"UTF-8\" />" +
-                "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />" +
-                "  <title>Facebook Entegrasyonu Hatası</title>" +
-                "  <style>" +
-                "    body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #fdf2f8; color: #1f2937; margin: 0; padding: 32px; display: flex; align-items: center; justify-content: center; min-height: 100vh; }" +
-                "    .card { background: #ffffff; border-radius: 16px; box-shadow: 0 20px 45px -20px rgba(190, 24, 93, 0.35); padding: 32px 40px; max-width: 460px; text-align: center; }" +
-                "    .card h1 { font-size: 24px; margin-bottom: 12px; color: #be123c; }" +
-                "    .card p { font-size: 16px; line-height: 1.5; margin-bottom: 12px; }" +
-                "    .status-badge { display: inline-flex; align-items: center; justify-content: center; padding: 8px 16px; border-radius: 999px; font-weight: 600; background: rgba(244, 63, 94, 0.15); color: #be123c; margin-bottom: 20px; letter-spacing: 0.4px; text-transform: uppercase; font-size: 12px; }" +
-                "    button { margin-top: 20px; background: #be123c; color: white; border: none; padding: 12px 20px; border-radius: 999px; font-size: 15px; font-weight: 600; cursor: pointer; }" +
-                "    button:hover { background: #9f1239; }" +
-                "    .fallback { margin-top: 16px; font-size: 14px; color: #6b7280; }" +
-                "    a { color: #2563eb; text-decoration: none; font-weight: 600; }" +
-                "    a:hover { text-decoration: underline; }" +
-                "  </style>" +
-                "</head>" +
-                "<body>" +
-                "  <div class=\"card\">" +
-                "    <div class=\"status-badge\">Bağlantı başarısız</div>" +
-                "    <h1>" + escapedTitle + "</h1>" +
-                "    <p>" + escapedMessage + "</p>" +
-                "    <button onclick=\"window.close();\">Pencereyi kapat</button>" +
-                "    <p class=\"fallback\">Sorun devam ederse <a href=\"" + HtmlUtils.htmlEscape(redirectUrl.isBlank() ? "#" : redirectUrl) + "\">entegrasyon sayfasına dönün</a>.</p>" +
-                "  </div>" +
-                "  <script>" +
-                "    const payload = { source: 'crm-pro-oauth', status: 'error', message: '" + escapeForJsString(rawMessage) + "', redirectUrl: '" + escapeForJsString(redirectUrl) + "' };" +
-                "    if (window.opener && !window.opener.closed) {" +
-                "      window.opener.postMessage(payload, '*');" +
-                "    }" +
-                "  </script>" +
-                "</body>" +
-                "</html>";
-        return ResponseEntity.status(HttpStatus.OK)
-                .contentType(MediaType.TEXT_HTML)
-                .body(html);
-    }
-
-    private String escapeForJsString(String input) {
-        if (input == null) {
-            return "";
-        }
-        return input
-                .replace("\\", "\\\\")
-                .replace("'", "\\'")
-                .replace("\"", "\\\"")
-                .replace("\n", "\\n")
-                .replace("\r", "\\r");
     }
 
     @GetMapping("/oauth2/test-success")
@@ -306,5 +211,91 @@ public class IntegrationController {
         }
 
         return organizationId;
+    }
+
+    private ResponseEntity<String> buildPopupSuccessPage(String message) {
+        String resolvedMessage = StringUtils.hasText(message) ? message : "";
+        String redirectUrl = StringUtils.hasText(frontendSuccessRedirectUrl) ? frontendSuccessRedirectUrl : "";
+
+        Map<String, String> values = new HashMap<>();
+        values.put("PAGE_TITLE", "Facebook Entegrasyonu");
+        values.put("STATUS_BADGE", "Bağlantı tamamlandı");
+        values.put("HEADING", "Facebook bağlantısı başarılı!");
+        values.put("MESSAGE", HtmlUtils.htmlEscape(resolvedMessage));
+        values.put("FALLBACK_HTML", buildSuccessFallbackHtml(redirectUrl));
+        values.put("PAYLOAD_STATUS", "success");
+        values.put("PAYLOAD_MESSAGE", escapeForJsString(resolvedMessage));
+        values.put("PAYLOAD_REDIRECT_URL", escapeForJsString(redirectUrl));
+
+        String body = renderTemplate("integration-success.html", values);
+        return ResponseEntity.ok()
+                .contentType(MediaType.TEXT_HTML)
+                .body(body);
+    }
+
+    private ResponseEntity<String> buildPopupErrorPage(String title, String errorMessage) {
+        String resolvedTitle = StringUtils.hasText(title) ? title : "Hata oluştu";
+        String resolvedMessage = StringUtils.hasText(errorMessage) ? errorMessage : "Bilinmeyen bir hata oluştu.";
+        String redirectUrl = StringUtils.hasText(frontendErrorRedirectUrl) ? frontendErrorRedirectUrl : "";
+
+        Map<String, String> values = new HashMap<>();
+        values.put("PAGE_TITLE", "Facebook Entegrasyonu Hatası");
+        values.put("STATUS_BADGE", "Bağlantı başarısız");
+        values.put("HEADING", HtmlUtils.htmlEscape(resolvedTitle));
+        values.put("MESSAGE", HtmlUtils.htmlEscape(resolvedMessage));
+        values.put("FALLBACK_HTML", buildErrorFallbackHtml(redirectUrl));
+        values.put("PAYLOAD_STATUS", "error");
+        values.put("PAYLOAD_MESSAGE", escapeForJsString(resolvedMessage));
+        values.put("PAYLOAD_REDIRECT_URL", escapeForJsString(redirectUrl));
+
+        String body = renderTemplate("integration-error.html", values);
+        return ResponseEntity.ok()
+                .contentType(MediaType.TEXT_HTML)
+                .body(body);
+    }
+
+    private String buildSuccessFallbackHtml(String redirectUrl) {
+        if (StringUtils.hasText(redirectUrl)) {
+            return "Bu pencere otomatik kapanmazsa <a href=\"" + HtmlUtils.htmlEscape(redirectUrl) + "\">buraya tıklayın</a>.";
+        }
+        return "Bu pencere otomatik kapanmazsa bu pencereyi kapatabilirsiniz.";
+    }
+
+    private String buildErrorFallbackHtml(String redirectUrl) {
+        if (StringUtils.hasText(redirectUrl)) {
+            return "Sorun devam ederse <a href=\"" + HtmlUtils.htmlEscape(redirectUrl) + "\">entegrasyon sayfasına dönün</a>.";
+        }
+        return "Sorun devam ederse destek ekibimizle iletişime geçin.";
+    }
+
+    private String renderTemplate(String templateName, Map<String, String> values) {
+        try (InputStream inputStream = getClass().getClassLoader().getResourceAsStream("templates/" + templateName)) {
+            if (inputStream == null) {
+                throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                        "Şablon bulunamadı: " + templateName);
+            }
+            String template = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
+            String rendered = template;
+            for (Map.Entry<String, String> entry : values.entrySet()) {
+                String key = "{{" + entry.getKey() + "}}";
+                rendered = rendered.replace(key, entry.getValue());
+            }
+            return rendered;
+        } catch (IOException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Şablon yüklenirken hata oluştu: " + templateName, e);
+        }
+    }
+
+    private String escapeForJsString(String input) {
+        if (input == null) {
+            return "";
+        }
+        return input
+                .replace("\\", "\\\\")
+                .replace("'", "\\'")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r");
     }
 }
