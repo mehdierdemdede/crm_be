@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<!-- integration-success template -->
+<html lang="tr">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{PAGE_TITLE}}</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            background: #f5f7fb;
+            color: #1f2937;
+            margin: 0;
+            padding: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+
+        .card {
+            background: #ffffff;
+            border-radius: 16px;
+            box-shadow: 0 20px 45px -20px rgba(15, 23, 42, 0.35);
+            padding: 32px 40px;
+            max-width: 420px;
+            text-align: center;
+        }
+
+        .card h1 {
+            font-size: 24px;
+            margin-bottom: 12px;
+            color: #047857;
+        }
+
+        .card p {
+            font-size: 16px;
+            line-height: 1.5;
+            margin-bottom: 0;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 8px 16px;
+            border-radius: 999px;
+            font-weight: 600;
+            background: rgba(16, 185, 129, 0.15);
+            color: #047857;
+            margin-bottom: 20px;
+            letter-spacing: 0.4px;
+            text-transform: uppercase;
+            font-size: 12px;
+        }
+
+        .fallback {
+            margin-top: 24px;
+            font-size: 14px;
+            color: #6b7280;
+        }
+
+        a {
+            color: #2563eb;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+<div class="card">
+    <div class="status-badge">{{STATUS_BADGE}}</div>
+    <h1>{{HEADING}}</h1>
+    <p>{{MESSAGE}}</p>
+    <p class="fallback">{{FALLBACK_HTML}}</p>
+</div>
+<script>
+    const payload = {
+        source: 'crm-pro-oauth',
+        status: '{{PAYLOAD_STATUS}}',
+        message: '{{PAYLOAD_MESSAGE}}',
+        redirectUrl: '{{PAYLOAD_REDIRECT_URL}}'
+    };
+
+    function closeWindow() {
+        window.close();
+    }
+
+    if (window.opener && !window.opener.closed) {
+        window.opener.postMessage(payload, '*');
+        setTimeout(closeWindow, 900);
+    } else if (payload.redirectUrl) {
+        setTimeout(function () {
+            window.location.href = payload.redirectUrl;
+        }, 1500);
+    }
+</script>
+</body>
+</html>
