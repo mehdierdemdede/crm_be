@@ -27,6 +27,7 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -100,7 +101,7 @@ public class IntegrationController {
                                                             UUID organizationIdParam) {
         UUID organizationId = resolveOrganizationId(currentUser, organizationIdParam);
 
-        IntegrationPlatform integrationPlatform = IntegrationPlatform.valueOf(platform.toUpperCase());
+        IntegrationPlatform integrationPlatform = resolvePlatform(platform);
         IntegrationConfig config = integrationService.getIntegrationConfig(organizationId, integrationPlatform)
                 .orElseThrow(() -> new ResourceNotFoundException("Integration not found for platform " + platform));
         return ResponseEntity.ok(config);
@@ -126,7 +127,7 @@ public class IntegrationController {
                                                   UUID organizationIdParam) {
         UUID organizationId = resolveOrganizationId(currentUser, organizationIdParam);
 
-        IntegrationPlatform integrationPlatform = IntegrationPlatform.valueOf(platform.toUpperCase());
+        IntegrationPlatform integrationPlatform = resolvePlatform(platform);
         integrationService.deleteIntegrationConfig(organizationId, integrationPlatform);
         return ResponseEntity.noContent().build();
     }
@@ -139,15 +140,13 @@ public class IntegrationController {
                                                              UUID organizationIdParam) {
         UUID organizationId = resolveOrganizationId(currentUser, organizationIdParam);
 
-        IntegrationPlatform integrationPlatform = IntegrationPlatform.valueOf(platform.toUpperCase());
-        LeadSyncResult result;
-        if (integrationPlatform == IntegrationPlatform.GOOGLE) {
-            result = integrationService.fetchGoogleLeads(organizationId);
-        } else if (integrationPlatform == IntegrationPlatform.FACEBOOK) {
-            result = integrationService.fetchFacebookLeads(organizationId);
-        } else {
-            throw new IllegalArgumentException("Unsupported platform: " + platform);
-        }
+        IntegrationPlatform integrationPlatform = resolvePlatform(platform);
+        LeadSyncResult result = switch (integrationPlatform) {
+            case GOOGLE -> integrationService.fetchGoogleLeads(organizationId);
+            case FACEBOOK -> integrationService.fetchFacebookLeads(organizationId);
+            default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Manual lead fetch is not supported for platform: " + platform);
+        };
         return ResponseEntity.ok(result);
     }
 
@@ -167,7 +166,7 @@ public class IntegrationController {
         UUID organizationId = resolveOrganizationId(currentUser, organizationIdParam);
         IntegrationPlatform integrationPlatform = null;
         if (platform != null && !platform.isBlank()) {
-            integrationPlatform = IntegrationPlatform.valueOf(platform.toUpperCase());
+            integrationPlatform = resolvePlatform(platform);
         }
 
         Sort sort = Sort.by(Sort.Direction.DESC, "startedAt");
@@ -297,5 +296,18 @@ public class IntegrationController {
                 .replace("\"", "\\\"")
                 .replace("\n", "\\n")
                 .replace("\r", "\\r");
+    }
+
+    private IntegrationPlatform resolvePlatform(String platform) {
+        if (!StringUtils.hasText(platform)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Platform must not be empty.");
+        }
+
+        try {
+            return IntegrationPlatform.valueOf(platform.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Invalid integration platform: " + platform, ex);
+        }
     }
 }
