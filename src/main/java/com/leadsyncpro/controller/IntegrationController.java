@@ -8,6 +8,10 @@ import com.leadsyncpro.repository.IntegrationLogRepository;
 import com.leadsyncpro.security.UserPrincipal;
 import com.leadsyncpro.service.IntegrationService;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -251,22 +255,30 @@ public class IntegrationController {
     public ResponseEntity<List<IntegrationLog>> getIntegrationLogs(
             @RequestParam(required = false) String platform,
             @AuthenticationPrincipal UserPrincipal currentUser,
-            @RequestParam(value = "organizationId", required = false) UUID organizationIdParam) {
+            @RequestParam(value = "organizationId", required = false) UUID organizationIdParam,
+            @RequestParam(value = "page", required = false) Integer page,
+            @RequestParam(value = "size", required = false) Integer size) {
 
         UUID organizationId = resolveOrganizationId(currentUser, organizationIdParam);
-        List<IntegrationLog> logs;
-
+        IntegrationPlatform integrationPlatform = null;
         if (platform != null && !platform.isBlank()) {
-            IntegrationPlatform integrationPlatform = IntegrationPlatform.valueOf(platform.toUpperCase());
-            logs = integrationLogRepository.findAll().stream()
-                    .filter(l -> l.getOrganizationId().equals(organizationId)
-                            && l.getPlatform() == integrationPlatform)
-                    .toList();
-        } else {
-            logs = integrationLogRepository.findAll().stream()
-                    .filter(l -> l.getOrganizationId().equals(organizationId))
-                    .toList();
+            integrationPlatform = IntegrationPlatform.valueOf(platform.toUpperCase());
         }
+
+        Sort sort = Sort.by(Sort.Direction.DESC, "startedAt");
+        boolean usePagination = page != null || size != null;
+
+        if (usePagination) {
+            int resolvedPage = page != null && page >= 0 ? page : 0;
+            int resolvedSize = size != null && size > 0 ? size : 20;
+            Pageable pageable = PageRequest.of(resolvedPage, resolvedSize, sort);
+            Page<IntegrationLog> logsPage = integrationLogRepository
+                    .findAllByOrganizationIdAndOptionalPlatform(organizationId, integrationPlatform, pageable);
+            return ResponseEntity.ok(logsPage.getContent());
+        }
+
+        List<IntegrationLog> logs = integrationLogRepository
+                .findAllByOrganizationIdAndOptionalPlatform(organizationId, integrationPlatform, sort);
 
         return ResponseEntity.ok(logs);
     }
