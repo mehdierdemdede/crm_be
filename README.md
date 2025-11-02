@@ -9,7 +9,7 @@ This repository now only contains the backend services for the CRM project. The 
    - PostgreSQL 14+ with a database/user that matches the credentials you configure below.
    - `./gradlew` is committed, so no global Gradle install is required.
 2. **Configure application properties** – copy `src/main/resources/application.properties` or override the values with environment variables before running the app. At minimum you should set the datasource credentials, JWT secret, encryption key, mail credentials, and the frontend URLs.
-3. **Run migrations** – enable Flyway (`SPRING_FLYWAY_ENABLED=true`) and start the app once to let the migrations seed the schema, or run them manually if you manage migrations externally.
+3. **Initialize the schema** – start the app once to let Hibernate create/update the tables (default `spring.jpa.hibernate.ddl-auto=update`) or apply your own SQL migrations externally.
 4. **Start the API** – `./gradlew bootRun` (dev) or `./gradlew bootJar && java -jar build/libs/*.jar` (packaged jar).
 5. **Execute tests** – `./gradlew test`.
 
@@ -80,13 +80,13 @@ Set `app.cors.allowed-origins` in `application.properties` (or via environment v
 
 ## Bootstrap a global SUPER_ADMIN
 
-After resetting PostgreSQL you can restore the global control user by either letting Flyway run the `V3__seed_global_super_admin.sql` migration or by executing the helper script manually:
+After resetting PostgreSQL you can restore the global control user by executing the helper script manually:
 
 ```sql
 \i docs/sql/seed_super_admin.sql
 ```
 
-Both approaches ensure the `pgcrypto` extension is available and hash the password `password` with bcrypt on the server before inserting the row. The default credentials are:
+The script ensures the `pgcrypto` extension is available and hashes the password `password` with bcrypt on the server before inserting the row. The default credentials are:
 
 - **Email:** `super.admin@global.local`
 - **Password:** `password`
