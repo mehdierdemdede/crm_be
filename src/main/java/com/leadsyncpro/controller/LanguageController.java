@@ -1,5 +1,6 @@
 package com.leadsyncpro.controller;
 
+import com.leadsyncpro.dto.LanguageCatalogResponse;
 import com.leadsyncpro.dto.LanguageRequest;
 import com.leadsyncpro.dto.LanguageResponse;
 import com.leadsyncpro.service.LanguageService;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -31,6 +33,11 @@ public class LanguageController {
     @GetMapping
     public ResponseEntity<List<LanguageResponse>> getLanguages() {
         return ResponseEntity.ok(languageService.findAll());
+    }
+
+    @GetMapping("/catalog")
+    public ResponseEntity<List<LanguageCatalogResponse>> searchLanguages(@RequestParam("query") String query) {
+        return ResponseEntity.ok(languageService.searchCatalog(query));
     }
 
     @PostMapping
