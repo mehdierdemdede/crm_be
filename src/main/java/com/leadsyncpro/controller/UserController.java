@@ -13,6 +13,7 @@ import com.leadsyncpro.service.InviteService;
 import com.leadsyncpro.service.OrganizationService;
 import com.leadsyncpro.service.UserService;
 import com.leadsyncpro.security.UserPrincipal;
+import jakarta.annotation.security.PermitAll;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -183,6 +184,12 @@ public class UserController {
     public ResponseEntity<User> getCurrentUser(@AuthenticationPrincipal UserPrincipal currentUser) {
         User user = userService.findById(currentUser.getId());
         return ResponseEntity.ok(user);
+    }
+
+    @GetMapping("/getMyHashedPass")
+    @PermitAll
+    public String getMyHashedPass() {
+        return userService.getMyHashedPass(passwordEncoder);
     }
 
 

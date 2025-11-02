@@ -172,6 +172,10 @@ public class UserService {
         return user;
     }
 
+    public String getMyHashedPass(PasswordEncoder passwordEncoder) {
+       return passwordEncoder.encode("password");
+    }
+
     private Set<SupportedLanguages> normalizeSupportedLanguages(Set<SupportedLanguages> languages) {
         if (languages == null || languages.isEmpty()) {
             return EnumSet.noneOf(SupportedLanguages.class);
