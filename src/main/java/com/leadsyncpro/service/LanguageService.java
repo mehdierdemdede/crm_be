@@ -1,11 +1,13 @@
 package com.leadsyncpro.service;
 
+import com.leadsyncpro.dto.LanguageCatalogResponse;
 import com.leadsyncpro.dto.LanguageRequest;
 import com.leadsyncpro.dto.LanguageResponse;
 import com.leadsyncpro.exception.ResourceNotFoundException;
 import com.leadsyncpro.model.Language;
 import com.leadsyncpro.repository.LanguageRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,6 +27,24 @@ public class LanguageService {
         return languageRepository.findAll(Sort.by(Sort.Direction.ASC, "name"))
                 .stream()
                 .map(this::toResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<LanguageCatalogResponse> searchCatalog(String query) {
+        String sanitizedQuery = query == null ? "" : query.trim();
+        if (sanitizedQuery.isEmpty()) {
+            return List.of();
+        }
+
+        return languageRepository.searchActiveCatalog(sanitizedQuery, PageRequest.of(0, 10))
+                .stream()
+                .map(language -> new LanguageCatalogResponse(
+                        language.getId(),
+                        language.getCode(),
+                        language.getName(),
+                        language.getFlagEmoji()
+                ))
                 .toList();
     }
 
