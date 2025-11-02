@@ -41,8 +41,9 @@ dependencies {
 	implementation 'org.flywaydb:flyway-database-postgresql:10.15.0'
 
 
-	// Veritabanı Sürücüsü
-	runtimeOnly 'org.postgresql:postgresql' // PostgreSQL JDBC sürücüsü
+        // Veritabanı Sürücüleri
+        runtimeOnly 'org.postgresql:postgresql' // PostgreSQL JDBC sürücüsü
+        runtimeOnly 'com.h2database:h2' // Profil belirtilmediğinde kullanılacak hafif H2 sürücüsü
 
 	// JWT Kütüphaneleri (Manuel olarak eklenmeli)
 	// Spring Boot 3.x ve Jakarta uyumluluğu için bu versiyonlar önerilir.
