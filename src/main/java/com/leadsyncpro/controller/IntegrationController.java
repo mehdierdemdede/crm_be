@@ -7,6 +7,7 @@ import com.leadsyncpro.model.*;
 import com.leadsyncpro.repository.IntegrationLogRepository;
 import com.leadsyncpro.security.UserPrincipal;
 import com.leadsyncpro.service.IntegrationService;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -20,6 +21,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 import org.springframework.web.util.HtmlUtils;
 
 import java.io.IOException;
@@ -54,10 +56,17 @@ public class IntegrationController {
     @PreAuthorize("hasAuthority('SUPER_ADMIN')")
     public ResponseEntity<String> authorizeIntegration(@PathVariable String registrationId,
                                                        @AuthenticationPrincipal UserPrincipal currentUser,
+                                                       HttpServletRequest request,
                                                        @RequestParam(value = "organizationId", required = false)
                                                        UUID organizationIdParam) {
         UUID organizationId = resolveOrganizationId(currentUser, organizationIdParam);
-        String authorizationUrl = integrationService.getAuthorizationUrl(registrationId, organizationId, currentUser.getId());
+        String requestBaseUrl = determineRequestBaseUrl(request);
+        String authorizationUrl = integrationService.getAuthorizationUrl(
+                registrationId,
+                organizationId,
+                currentUser.getId(),
+                requestBaseUrl
+        );
         return ResponseEntity.ok(authorizationUrl);
     }
 
@@ -65,7 +74,8 @@ public class IntegrationController {
     public ResponseEntity<String> oauth2Callback(@PathVariable String registrationId,
                                                  @RequestParam(required = false) String code,
                                                  @RequestParam(required = false) String state,
-                                                 @RequestParam(required = false) String error) {
+                                                 @RequestParam(required = false) String error,
+                                                 HttpServletRequest request) {
         if (error != null) {
             return buildPopupErrorPage("OAuth2 işlemi tamamlanamadı", error);
         }
@@ -75,7 +85,8 @@ public class IntegrationController {
         }
 
         try {
-            integrationService.handleOAuth2Callback(registrationId, code, state);
+            String requestBaseUrl = determineRequestBaseUrl(request);
+            integrationService.handleOAuth2Callback(registrationId, code, state, requestBaseUrl);
             return buildPopupSuccessPage("Facebook entegrasyonu başarıyla tamamlandı.");
         } catch (Exception e) {
             return buildPopupErrorPage("Entegrasyon sırasında hata oluştu", e.getMessage());
@@ -309,5 +320,16 @@ public class IntegrationController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Invalid integration platform: " + platform, ex);
         }
+    }
+
+    private String determineRequestBaseUrl(HttpServletRequest request) {
+        ServletUriComponentsBuilder builder = ServletUriComponentsBuilder.fromRequest(request);
+        builder.replacePath(request.getContextPath());
+        builder.replaceQuery(null);
+        String baseUrl = builder.build().toUriString();
+        if (baseUrl.endsWith("/")) {
+            baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
+        }
+        return baseUrl;
     }
 }

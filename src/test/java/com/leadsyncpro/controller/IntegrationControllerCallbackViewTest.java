@@ -46,7 +46,9 @@ class IntegrationControllerCallbackViewTest {
 
     @Test
     void oauth2CallbackSuccessRendersSuccessTemplate() throws Exception {
-        Mockito.doNothing().when(integrationService).handleOAuth2Callback("facebook", "code-123", "state-xyz");
+        Mockito.doNothing()
+                .when(integrationService)
+                .handleOAuth2Callback("facebook", "code-123", "state-xyz", "http://localhost");
 
         mockMvc.perform(get("/api/integrations/oauth2/callback/facebook")
                 .param("code", "code-123")
@@ -57,7 +59,7 @@ class IntegrationControllerCallbackViewTest {
                 .andExpect(content().string(containsString("Facebook bağlantısı başarılı!")))
                 .andExpect(content().string(containsString("crm-pro-oauth")));
 
-        verify(integrationService).handleOAuth2Callback("facebook", "code-123", "state-xyz");
+        verify(integrationService).handleOAuth2Callback("facebook", "code-123", "state-xyz", "http://localhost");
     }
 
     @Test

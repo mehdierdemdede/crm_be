@@ -112,18 +112,26 @@ public class IntegrationService {
         return tokens.length > 0;
     }
 
-    private String resolveRedirectUri(String redirectUri) {
+    private String resolveRedirectUri(String redirectUri, String requestBaseUrl) {
         if (redirectUri != null && redirectUri.contains("{baseUrl}")) {
-            redirectUri = redirectUri.replace("{baseUrl}", resolveBackendBaseUrl());
+            redirectUri = redirectUri.replace("{baseUrl}", determineBackendBaseUrl(requestBaseUrl));
         }
         return redirectUri;
     }
 
-    private String resolveBackendBaseUrl() {
-        if (backendBaseUrl == null || backendBaseUrl.isBlank()) {
-            return "http://localhost:8080";
+    private String determineBackendBaseUrl(String requestBaseUrl) {
+        String candidate = !isBlank(requestBaseUrl) ? requestBaseUrl : backendBaseUrl;
+        if (isBlank(candidate)) {
+            candidate = "http://localhost:8080";
         }
-        return backendBaseUrl;
+        return trimTrailingSlash(candidate);
+    }
+
+    private String trimTrailingSlash(String value) {
+        if (value == null) {
+            return null;
+        }
+        return value.endsWith("/") ? value.substring(0, value.length() - 1) : value;
     }
 
     private static boolean isNameFieldKey(String normalizedKey) {
@@ -342,7 +350,10 @@ public class IntegrationService {
      * OAuth2 yetkilendirme akışını başlatır.
      * Frontend'in kullanıcıyı yönlendirmesi gereken yetkilendirme URL'ini döndürür.
      */
-    public String getAuthorizationUrl(String registrationId, UUID organizationId, UUID userId) {
+    public String getAuthorizationUrl(String registrationId,
+                                      UUID organizationId,
+                                      UUID userId,
+                                      String requestBaseUrl) {
         ClientRegistration clientRegistration = clientRegistrationRepository.findByRegistrationId(registrationId);
         if (clientRegistration == null) {
             throw new IllegalArgumentException("Geçersiz istemci kayıt ID'si: " + registrationId);
@@ -358,7 +369,7 @@ public class IntegrationService {
 
         String state = organizationId + "|" + userId;
 
-        String redirectUri = resolveRedirectUri(clientRegistration.getRedirectUri());
+        String redirectUri = resolveRedirectUri(clientRegistration.getRedirectUri(), requestBaseUrl);
 
         // Facebook için sadece sayfa lead’leri için gereken izinler
         List<String> scopes = Arrays.asList(
@@ -387,7 +398,7 @@ public class IntegrationService {
      * Bu metod, callback endpoint'iniz tarafından çağrılır.
      */
     @Transactional
-    public void handleOAuth2Callback(String registrationId, String code, String state) {
+    public void handleOAuth2Callback(String registrationId, String code, String state, String requestBaseUrl) {
         ClientRegistration clientRegistration = clientRegistrationRepository.findByRegistrationId(registrationId);
         if (clientRegistration == null) {
             logger.error("OAuth2 Callback Hatası: Geçersiz istemci kayıt ID'si: {}", registrationId);
@@ -414,7 +425,7 @@ public class IntegrationService {
             params.add("grant_type", "authorization_code");
             params.add("client_id", clientRegistration.getClientId());
             params.add("client_secret", clientRegistration.getClientSecret());
-            String redirectUri = resolveRedirectUri(clientRegistration.getRedirectUri());
+            String redirectUri = resolveRedirectUri(clientRegistration.getRedirectUri(), requestBaseUrl);
             params.add("redirect_uri", redirectUri);
             params.add("code", code);
 
