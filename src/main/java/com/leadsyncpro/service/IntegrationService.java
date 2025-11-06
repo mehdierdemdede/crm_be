@@ -52,6 +52,9 @@ public class IntegrationService {
     @Value("${app.encryption.key}")
     private String encryptionKey;
 
+    @Value("${app.backend.base-url:http://localhost:8080}")
+    private String backendBaseUrl;
+
     private static String asString(Object o) { return o == null ? null : o.toString(); }
     private static String safe(String s) { return s == null ? "" : s; }
     private static boolean isBlank(String s) { return s == null || s.trim().isEmpty(); }
@@ -107,6 +110,20 @@ public class IntegrationService {
             }
         }
         return tokens.length > 0;
+    }
+
+    private String resolveRedirectUri(String redirectUri) {
+        if (redirectUri != null && redirectUri.contains("{baseUrl}")) {
+            redirectUri = redirectUri.replace("{baseUrl}", resolveBackendBaseUrl());
+        }
+        return redirectUri;
+    }
+
+    private String resolveBackendBaseUrl() {
+        if (backendBaseUrl == null || backendBaseUrl.isBlank()) {
+            return "http://localhost:8080";
+        }
+        return backendBaseUrl;
     }
 
     private static boolean isNameFieldKey(String normalizedKey) {
@@ -341,10 +358,7 @@ public class IntegrationService {
 
         String state = organizationId + "|" + userId;
 
-        String redirectUri = clientRegistration.getRedirectUri();
-        if (redirectUri.contains("{baseUrl}")) {
-            redirectUri = redirectUri.replace("{baseUrl}", "http://localhost:8080");
-        }
+        String redirectUri = resolveRedirectUri(clientRegistration.getRedirectUri());
 
         // Facebook için sadece sayfa lead’leri için gereken izinler
         List<String> scopes = Arrays.asList(
@@ -400,10 +414,7 @@ public class IntegrationService {
             params.add("grant_type", "authorization_code");
             params.add("client_id", clientRegistration.getClientId());
             params.add("client_secret", clientRegistration.getClientSecret());
-            String redirectUri = clientRegistration.getRedirectUri();
-            if (redirectUri.contains("{baseUrl}")) {
-                redirectUri = redirectUri.replace("{baseUrl}", "http://localhost:8080");
-            }
+            String redirectUri = resolveRedirectUri(clientRegistration.getRedirectUri());
             params.add("redirect_uri", redirectUri);
             params.add("code", code);
 
