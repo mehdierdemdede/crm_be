@@ -52,7 +52,7 @@ public class IntegrationService {
     @Value("${app.encryption.key}")
     private String encryptionKey;
 
-    @Value("${app.backend.base-url:http://localhost:8080}")
+    @Value("${app.backend.base-url}")
     private String backendBaseUrl;
 
     private static String asString(Object o) { return o == null ? null : o.toString(); }
