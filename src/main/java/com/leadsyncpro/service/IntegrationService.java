@@ -120,24 +120,17 @@ public class IntegrationService {
     }
 
     private String determineBackendBaseUrl(String requestBaseUrl) {
-        String requestCandidate = isBlank(requestBaseUrl) ? null : requestBaseUrl;
         String configCandidate = isBlank(backendBaseUrl) ? null : backendBaseUrl;
-
-        String candidate;
-        if (requestCandidate != null && configCandidate != null) {
-            boolean requestIsHttp = requestCandidate.startsWith("http://");
-            boolean configIsHttps = configCandidate.startsWith("https://");
-
-            candidate = (requestIsHttp && configIsHttps) ? configCandidate : requestCandidate;
-        } else if (requestCandidate != null) {
-            candidate = requestCandidate;
-        } else if (configCandidate != null) {
-            candidate = configCandidate;
-        } else {
-            candidate = "http://localhost:8080";
+        if (configCandidate != null) {
+            return trimTrailingSlash(configCandidate);
         }
 
-        return trimTrailingSlash(candidate);
+        String requestCandidate = isBlank(requestBaseUrl) ? null : requestBaseUrl;
+        if (requestCandidate != null) {
+            return trimTrailingSlash(requestCandidate);
+        }
+
+        return "http://localhost:8080";
     }
 
     private String trimTrailingSlash(String value) {
