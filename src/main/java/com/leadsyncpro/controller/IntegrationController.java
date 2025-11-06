@@ -323,13 +323,229 @@ public class IntegrationController {
     }
 
     private String determineRequestBaseUrl(HttpServletRequest request) {
-        ServletUriComponentsBuilder builder = ServletUriComponentsBuilder.fromRequest(request);
-        builder.replacePath(request.getContextPath());
-        builder.replaceQuery(null);
-        String baseUrl = builder.build().toUriString();
+        String baseUrl = buildBaseUrlFromForwardedHeaders(request);
+
+        if (!StringUtils.hasText(baseUrl)) {
+            ServletUriComponentsBuilder builder = ServletUriComponentsBuilder.fromRequest(request);
+            builder.replacePath(request.getContextPath());
+            builder.replaceQuery(null);
+            baseUrl = builder.build().toUriString();
+        }
+
         if (baseUrl.endsWith("/")) {
             baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
         }
         return baseUrl;
+    }
+
+    private String buildBaseUrlFromForwardedHeaders(HttpServletRequest request) {
+        ForwardedHeaderDetails details = ForwardedHeaderDetails.from(request);
+        if (details == null || !details.hasHost()) {
+            return null;
+        }
+
+        StringBuilder url = new StringBuilder();
+        url.append(details.getScheme()).append("://").append(details.getHost());
+
+        if (details.shouldAppendPort()) {
+            url.append(":").append(details.getPort());
+        }
+
+        String combinedPath = combinePaths(details.getPrefix(), request.getContextPath());
+        if (StringUtils.hasText(combinedPath)) {
+            url.append(combinedPath);
+        }
+
+        return url.toString();
+    }
+
+    private String combinePaths(String first, String second) {
+        String combined = normalizePath(first) + normalizePath(second);
+        if (!StringUtils.hasText(combined)) {
+            return "";
+        }
+        return combined.startsWith("/") ? combined : "/" + combined;
+    }
+
+    private String normalizePath(String path) {
+        if (!StringUtils.hasText(path)) {
+            return "";
+        }
+        String normalized = path.trim();
+        if (normalized.endsWith("/")) {
+            normalized = normalized.substring(0, normalized.length() - 1);
+        }
+        return normalized.startsWith("/") ? normalized : "/" + normalized;
+    }
+
+    private static class ForwardedHeaderDetails {
+        private final String scheme;
+        private final String host;
+        private final String port;
+        private final String prefix;
+
+        private ForwardedHeaderDetails(String scheme, String host, String port, String prefix) {
+            this.scheme = scheme;
+            this.host = host;
+            this.port = port;
+            this.prefix = prefix;
+        }
+
+        static ForwardedHeaderDetails from(HttpServletRequest request) {
+            String forwarded = request.getHeader("Forwarded");
+            if (StringUtils.hasText(forwarded)) {
+                ForwardedHeaderDetails parsed = parseForwardedHeader(forwarded);
+                if (parsed != null) {
+                    if (!StringUtils.hasText(parsed.scheme)) {
+                        return new ForwardedHeaderDetails(request.getScheme(), parsed.host, parsed.port, parsed.prefix);
+                    }
+                    return parsed;
+                }
+            }
+
+            String host = firstHeaderValue(request, "X-Forwarded-Host");
+            String scheme = firstHeaderValue(request, "X-Forwarded-Proto");
+            String port = firstHeaderValue(request, "X-Forwarded-Port");
+            String prefix = firstHeaderValue(request, "X-Forwarded-Prefix");
+
+            if (!StringUtils.hasText(host)) {
+                return null;
+            }
+
+            if (!StringUtils.hasText(scheme)) {
+                scheme = request.getScheme();
+            }
+
+            return new ForwardedHeaderDetails(scheme, host, port, prefix);
+        }
+
+        private static ForwardedHeaderDetails parseForwardedHeader(String header) {
+            String[] parts = header.split(",");
+            if (parts.length == 0) {
+                return null;
+            }
+
+            String first = parts[0];
+            String scheme = extractToken(first, "proto");
+            String host = extractToken(first, "host");
+
+            if (!StringUtils.hasText(host)) {
+                return null;
+            }
+
+            HostPort hostPort = splitHostAndPort(host);
+
+            return new ForwardedHeaderDetails(
+                    scheme,
+                    hostPort.host(),
+                    hostPort.port(),
+                    extractToken(first, "prefix")
+            );
+        }
+
+        private static HostPort splitHostAndPort(String value) {
+            if (!StringUtils.hasText(value)) {
+                return new HostPort(null, null);
+            }
+
+            String host = value;
+            String port = null;
+
+            if (value.startsWith("[") && value.contains("]")) {
+                int closingIndex = value.indexOf(']');
+                host = value.substring(0, closingIndex + 1);
+                if (value.length() > closingIndex + 1 && value.charAt(closingIndex + 1) == ':') {
+                    port = value.substring(closingIndex + 2);
+                }
+            } else if (value.contains(":")) {
+                String[] hostParts = value.split(":", 2);
+                host = hostParts[0];
+                port = hostParts[1];
+            }
+
+            return new HostPort(host, port);
+        }
+
+        private static String extractToken(String value, String token) {
+            String[] segments = value.split(";");
+            for (String segment : segments) {
+                String[] keyValue = segment.trim().split("=", 2);
+                if (keyValue.length == 2 && token.equalsIgnoreCase(keyValue[0].trim())) {
+                    return trimQuotes(keyValue[1].trim());
+                }
+            }
+            return null;
+        }
+
+        private static String trimQuotes(String value) {
+            if (value == null) {
+                return null;
+            }
+            if (value.startsWith("\"") && value.endsWith("\"")) {
+                return value.substring(1, value.length() - 1);
+            }
+            return value;
+        }
+
+        private static String firstHeaderValue(HttpServletRequest request, String headerName) {
+            String headerValue = request.getHeader(headerName);
+            if (!StringUtils.hasText(headerValue)) {
+                return null;
+            }
+            if (headerValue.contains(",")) {
+                return headerValue.split(",")[0].trim();
+            }
+            return headerValue.trim();
+        }
+
+        boolean hasHost() {
+            return StringUtils.hasText(host);
+        }
+
+        String getScheme() {
+            return StringUtils.hasText(scheme) ? scheme : "https";
+        }
+
+        String getHost() {
+            return host;
+        }
+
+        String getPort() {
+            return port;
+        }
+
+        boolean shouldAppendPort() {
+            if (!StringUtils.hasText(port)) {
+                return false;
+            }
+            if (hostContainsPort(host)) {
+                return false;
+            }
+            if ("https".equalsIgnoreCase(getScheme()) && "443".equals(port)) {
+                return false;
+            }
+            if ("http".equalsIgnoreCase(getScheme()) && "80".equals(port)) {
+                return false;
+            }
+            return true;
+        }
+
+        String getPrefix() {
+            return prefix;
+        }
+
+        private boolean hostContainsPort(String hostValue) {
+            if (!StringUtils.hasText(hostValue)) {
+                return false;
+            }
+            if (hostValue.startsWith("[") && hostValue.contains("]")) {
+                int closingIndex = hostValue.indexOf(']');
+                return hostValue.length() > closingIndex + 1 && hostValue.charAt(closingIndex + 1) == ':';
+            }
+            return hostValue.contains(":");
+        }
+
+        private record HostPort(String host, String port) {
+        }
     }
 }
