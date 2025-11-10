@@ -42,6 +42,8 @@ public class Hotel {
     private Double nightlyRate;
 
     @Column(length = 3, nullable = false)
+    @NotBlank(message = "Currency is required")
+    @Pattern(regexp = "^[A-Z]{3}$", message = "Currency must be a valid ISO 4217 code")
     @Builder.Default
     private String currency = "EUR";
 
