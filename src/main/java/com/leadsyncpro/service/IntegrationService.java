@@ -27,6 +27,7 @@ import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
+import java.net.URI;
 import java.text.Normalizer;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -120,17 +121,45 @@ public class IntegrationService {
     }
 
     private String determineBackendBaseUrl(String requestBaseUrl) {
-        String configCandidate = isBlank(backendBaseUrl) ? null : backendBaseUrl;
+        String configCandidate = normalizeBaseUrl(backendBaseUrl);
         if (configCandidate != null) {
             return trimTrailingSlash(configCandidate);
         }
 
-        String requestCandidate = isBlank(requestBaseUrl) ? null : requestBaseUrl;
+        String requestCandidate = normalizeBaseUrl(requestBaseUrl);
         if (requestCandidate != null) {
             return trimTrailingSlash(requestCandidate);
         }
 
         return "http://localhost:8080";
+    }
+
+    private String normalizeBaseUrl(String candidate) {
+        if (isBlank(candidate)) {
+            return null;
+        }
+
+        String trimmed = trimTrailingSlash(candidate);
+
+        try {
+            URI uri = URI.create(trimmed);
+            int port = uri.getPort();
+            if (port == -1) {
+                return trimmed;
+            }
+
+            String scheme = uri.getScheme();
+            boolean defaultHttp = "http".equalsIgnoreCase(scheme) && port == 80;
+            boolean defaultHttps = "https".equalsIgnoreCase(scheme) && port == 443;
+            if (!(defaultHttp || defaultHttps)) {
+                return trimmed;
+            }
+
+            return trimTrailingSlash(UriComponentsBuilder.fromUri(uri).port(null).build().toUriString());
+        } catch (IllegalArgumentException ex) {
+            logger.warn("Invalid backend base URL '{}': {}", candidate, ex.getMessage());
+            return trimmed;
+        }
     }
 
     private String trimTrailingSlash(String value) {
