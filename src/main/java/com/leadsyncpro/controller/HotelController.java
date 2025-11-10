@@ -2,6 +2,7 @@ package com.leadsyncpro.controller;
 
 import com.leadsyncpro.model.Hotel;
 import com.leadsyncpro.repository.HotelRepository;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -23,18 +24,19 @@ public class HotelController {
     }
 
     @PostMapping
-    public ResponseEntity<Hotel> createHotel(@RequestBody Hotel hotel) {
+    public ResponseEntity<Hotel> createHotel(@Valid @RequestBody Hotel hotel) {
         return ResponseEntity.status(HttpStatus.CREATED).body(hotelRepository.save(hotel));
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<Hotel> updateHotel(@PathVariable UUID id, @RequestBody Hotel updated) {
+    public ResponseEntity<Hotel> updateHotel(@PathVariable UUID id, @Valid @RequestBody Hotel updated) {
         return hotelRepository.findById(id)
                 .map(h -> {
                     h.setName(updated.getName());
                     h.setAddress(updated.getAddress());
-                    h.setStars(updated.getStars());
-                    h.setPricePerNight(updated.getPricePerNight());
+                    h.setStarRating(updated.getStarRating());
+                    h.setNightlyRate(updated.getNightlyRate());
+                    h.setCurrency(updated.getCurrency());
                     return ResponseEntity.ok(hotelRepository.save(h));
                 })
                 .orElse(ResponseEntity.notFound().build());
