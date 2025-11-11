@@ -44,6 +44,8 @@ The backend and frontend can be deployed independently while sharing the same do
 
 For more frontend-specific integration details see [`docs/frontend/facebook-lead-sync.md`](docs/frontend/facebook-lead-sync.md).
 
+Looking for the full backend enhancement scope? See [`docs/backend/enhancement-requirements.md`](docs/backend/enhancement-requirements.md) for the consolidated requirements covering lead automation, secure communications, RBAC, reporting, and compliance.
+
 ## Facebook Lead Fetch API
 
 > Looking for the full frontend playbook? See [`docs/frontend/facebook-lead-sync.md`](docs/frontend/facebook-lead-sync.md).
