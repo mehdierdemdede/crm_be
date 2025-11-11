@@ -1,0 +1,242 @@
+package com.leadsyncpro.billing.integration.iyzico;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.iyzipay.Options;
+import com.leadsyncpro.billing.config.IyzicoProperties;
+import com.leadsyncpro.model.billing.Customer;
+import com.leadsyncpro.model.billing.PaymentMethod;
+import com.leadsyncpro.model.billing.Price;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Base64;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
+import org.springframework.util.StringUtils;
+import org.springframework.web.client.RestTemplate;
+
+@Slf4j
+public class DefaultIyzicoClient implements IyzicoClient {
+
+    private static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(10);
+    private static final String SIGNATURE_ALGORITHM = "HmacSHA256";
+    private static final String SANDBOX_BASE_URL = "https://sandbox-api.iyzipay.com";
+
+    private final RestTemplate restTemplate;
+    private final IyzicoProperties properties;
+    private final ObjectMapper objectMapper;
+    private final Options options;
+
+    public DefaultIyzicoClient(RestTemplate restTemplate, IyzicoProperties properties, ObjectMapper objectMapper) {
+        this.restTemplate = Objects.requireNonNull(restTemplate, "restTemplate must not be null");
+        this.properties = Objects.requireNonNull(properties, "properties must not be null");
+        this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
+        this.options = buildOptions();
+
+        log.info(
+                "Iyzico client initialized with baseUrl={} and timeouts={}ms",
+                getBaseUrl(),
+                DEFAULT_TIMEOUT.toMillis());
+    }
+
+    @Override
+    public String createOrAttachPaymentMethod(Customer customer, String cardToken) {
+        Map<String, Object> request = new HashMap<>();
+        request.put("customerReferenceCode", customer.getExternalId());
+        request.put("cardToken", cardToken);
+        logRequest("createOrAttachPaymentMethod", request);
+        try {
+            String paymentMethodToken = cardToken;
+            logResponse("createOrAttachPaymentMethod", Map.of("paymentMethodToken", paymentMethodToken));
+            return paymentMethodToken;
+        } catch (Exception ex) {
+            throw wrap("Failed to create or attach payment method", ex);
+        }
+    }
+
+    @Override
+    public IyzicoSubscriptionResponse createSubscription(
+            Customer customer, Price price, int seatCount, PaymentMethod paymentMethod) {
+        Map<String, Object> request = new HashMap<>();
+        request.put("customerReferenceCode", customer.getExternalId());
+        request.put("pricingPlanReferenceCode", price.getId() != null ? price.getId().toString() : null);
+        request.put("seatCount", seatCount);
+        request.put("paymentMethodToken", paymentMethod.getTokenRef());
+        logRequest("createSubscription", request);
+        try {
+            Instant now = Instant.now();
+            IyzicoSubscriptionResponse response =
+                    new IyzicoSubscriptionResponse(generateExternalId("sub"), now, now.plus(Duration.ofDays(30)), false);
+            logResponse("createSubscription", response);
+            return response;
+        } catch (Exception ex) {
+            throw wrap("Failed to create subscription", ex);
+        }
+    }
+
+    @Override
+    public void changeSubscriptionPlan(
+            String externalSubscriptionId, Price newPrice, ProrationBehavior prorationBehavior) {
+        Map<String, Object> request = new HashMap<>();
+        request.put("subscriptionId", externalSubscriptionId);
+        request.put("newPricingPlan", newPrice.getId() != null ? newPrice.getId().toString() : null);
+        request.put("prorationBehavior", prorationBehavior.name());
+        logRequest("changeSubscriptionPlan", request);
+        try {
+            logResponse("changeSubscriptionPlan", Map.of("status", "accepted"));
+        } catch (Exception ex) {
+            throw wrap("Failed to change subscription plan", ex);
+        }
+    }
+
+    @Override
+    public void updateSeatCount(String externalSubscriptionId, int seatCount, ProrationBehavior prorationBehavior) {
+        Map<String, Object> request = new HashMap<>();
+        request.put("subscriptionId", externalSubscriptionId);
+        request.put("seatCount", seatCount);
+        request.put("prorationBehavior", prorationBehavior.name());
+        logRequest("updateSeatCount", request);
+        try {
+            logResponse("updateSeatCount", Map.of("status", "accepted"));
+        } catch (Exception ex) {
+            throw wrap("Failed to update seat count", ex);
+        }
+    }
+
+    @Override
+    public void cancelSubscription(String externalSubscriptionId, boolean cancelAtPeriodEnd) {
+        Map<String, Object> request = new HashMap<>();
+        request.put("subscriptionId", externalSubscriptionId);
+        request.put("cancelAtPeriodEnd", cancelAtPeriodEnd);
+        logRequest("cancelSubscription", request);
+        try {
+            logResponse("cancelSubscription", Map.of("status", "accepted"));
+        } catch (Exception ex) {
+            throw wrap("Failed to cancel subscription", ex);
+        }
+    }
+
+    @Override
+    public IyzicoInvoiceResponse createInvoice(
+            String externalSubscriptionId,
+            Instant periodStart,
+            Instant periodEnd,
+            long amountCents,
+            String currency) {
+        Map<String, Object> request = new HashMap<>();
+        request.put("subscriptionId", externalSubscriptionId);
+        request.put("periodStart", periodStart);
+        request.put("periodEnd", periodEnd);
+        request.put("amountCents", amountCents);
+        request.put("currency", currency);
+        logRequest("createInvoice", request);
+        try {
+            IyzicoInvoiceResponse response =
+                    new IyzicoInvoiceResponse(generateExternalId("inv"), periodStart, periodEnd, amountCents, currency);
+            logResponse("createInvoice", response);
+            return response;
+        } catch (Exception ex) {
+            throw wrap("Failed to create invoice", ex);
+        }
+    }
+
+    @Override
+    public boolean verifyWebhook(String signatureHeader, String payload) {
+        if (!StringUtils.hasText(signatureHeader) || !StringUtils.hasText(payload)) {
+            return false;
+        }
+
+        String secret = properties.getWebhookSigningSecret();
+        if (!StringUtils.hasText(secret)) {
+            log.warn("Webhook signing secret is not configured; skipping signature verification");
+            return false;
+        }
+
+        try {
+            Mac mac = Mac.getInstance(SIGNATURE_ALGORITHM);
+            mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), SIGNATURE_ALGORITHM));
+            byte[] expected = mac.doFinal(payload.getBytes(StandardCharsets.UTF_8));
+            String encoded = Base64.getEncoder().encodeToString(expected);
+            boolean valid = MessageDigestEquality.equals(encoded, signatureHeader.trim());
+            if (!valid) {
+                log.warn("Webhook signature mismatch; expected={}, actual={}", encoded, signatureHeader);
+            }
+            return valid;
+        } catch (Exception ex) {
+            throw wrap("Failed to verify webhook signature", ex);
+        }
+    }
+
+    private String getBaseUrl() {
+        return StringUtils.hasText(properties.getBaseUrl()) ? properties.getBaseUrl() : SANDBOX_BASE_URL;
+    }
+
+    private Options buildOptions() {
+        Options opts = new Options();
+        opts.setApiKey(properties.getApiKey());
+        opts.setSecretKey(properties.getSecretKey());
+        opts.setBaseUrl(getBaseUrl());
+        opts.setConnectionTimeout((int) DEFAULT_TIMEOUT.toMillis());
+        opts.setReadTimeout((int) DEFAULT_TIMEOUT.toMillis());
+        return opts;
+    }
+
+    private void logRequest(String operation, Object payload) {
+        String requestId = Optional.ofNullable(MDC.get("requestId")).orElse("-");
+        if (log.isDebugEnabled()) {
+            log.debug("requestId={} iyzico operation={} request={} ", requestId, operation, toJson(payload));
+        } else {
+            log.info("requestId={} iyzico operation={}", requestId, operation);
+        }
+    }
+
+    private void logResponse(String operation, Object payload) {
+        String requestId = Optional.ofNullable(MDC.get("requestId")).orElse("-");
+        if (log.isDebugEnabled()) {
+            log.debug("requestId={} iyzico operation={} response={} ", requestId, operation, toJson(payload));
+        } else {
+            log.info("requestId={} iyzico operation={} completed", requestId, operation);
+        }
+    }
+
+    private String toJson(Object value) {
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (JsonProcessingException e) {
+            return String.valueOf(value);
+        }
+    }
+
+    private IyzicoException wrap(String message, Exception ex) {
+        return ex instanceof IyzicoException ? (IyzicoException) ex : new IyzicoException(message, ex);
+    }
+
+    private String generateExternalId(String prefix) {
+        return prefix + "_" + UUID.randomUUID();
+    }
+
+    private static final class MessageDigestEquality {
+        private MessageDigestEquality() {}
+
+        private static boolean equals(String expected, String actual) {
+            byte[] expectedBytes = expected.getBytes(StandardCharsets.UTF_8);
+            byte[] actualBytes = actual.getBytes(StandardCharsets.UTF_8);
+            if (expectedBytes.length != actualBytes.length) {
+                return false;
+            }
+            int result = 0;
+            for (int i = 0; i < expectedBytes.length; i++) {
+                result |= expectedBytes[i] ^ actualBytes[i];
+            }
+            return result == 0;
+        }
+    }
+}

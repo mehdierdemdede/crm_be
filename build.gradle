@@ -40,9 +40,6 @@ dependencies {
         implementation 'org.springframework.retry:spring-retry'
         implementation 'org.springframework.boot:spring-boot-starter-actuator'
         implementation 'org.flywaydb:flyway-core'
-        implementation 'com.iyzipay:iyzipay-java:2.0.90'
-
-
         // Veritabanı Sürücüleri
         runtimeOnly 'org.postgresql:postgresql' // PostgreSQL JDBC sürücüsü
         runtimeOnly 'com.h2database:h2' // Profil belirtilmediğinde kullanılacak hafif H2 sürücüsü
