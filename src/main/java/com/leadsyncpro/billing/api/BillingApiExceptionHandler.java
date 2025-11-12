@@ -1,5 +1,7 @@
 package com.leadsyncpro.billing.api;
 
+import com.leadsyncpro.billing.api.idempotency.IdempotencyConflictException;
+import com.leadsyncpro.billing.api.idempotency.IdempotencyKeyMissingException;
 import com.leadsyncpro.billing.facade.SubscriptionNotFoundException;
 import com.leadsyncpro.billing.facade.SubscriptionOperationException;
 import org.springframework.http.HttpStatus;
@@ -23,5 +25,19 @@ public class BillingApiExceptionHandler {
         ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
         detail.setTitle("Subscription operation failed");
         return ResponseEntity.badRequest().body(detail);
+    }
+
+    @ExceptionHandler(IdempotencyKeyMissingException.class)
+    public ResponseEntity<ProblemDetail> handleMissingIdempotencyKey(IdempotencyKeyMissingException ex) {
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        detail.setTitle("Idempotency key missing");
+        return ResponseEntity.badRequest().body(detail);
+    }
+
+    @ExceptionHandler(IdempotencyConflictException.class)
+    public ResponseEntity<ProblemDetail> handleIdempotencyConflict(IdempotencyConflictException ex) {
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        detail.setTitle("Idempotency conflict");
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(detail);
     }
 }
