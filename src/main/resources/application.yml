@@ -1,6 +1,7 @@
 billing:
   currency: TRY
   timezone: Europe/Istanbul
+  rounding: HALF_UP
 iyzico:
   api-key: ${IYZICO_API_KEY:}
   secret-key: ${IYZICO_SECRET_KEY:}

@@ -2,6 +2,8 @@ package com.leadsyncpro.billing.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.leadsyncpro.billing.config.BillingProperties;
+import com.leadsyncpro.billing.money.MoneyRounding;
 import com.leadsyncpro.model.billing.BillingPeriod;
 import com.leadsyncpro.model.billing.Plan;
 import com.leadsyncpro.model.billing.Price;
@@ -11,7 +13,8 @@ import org.junit.jupiter.api.Test;
 class InvoicingServiceTest {
 
     private final PricingService pricingService = new PricingService();
-    private final InvoicingService invoicingService = new InvoicingService(pricingService);
+    private final InvoicingService invoicingService =
+            new InvoicingService(pricingService, new MoneyRounding(new BillingProperties()));
 
     @Test
     void seatIncreaseProrationUsesHalfUpRounding() {

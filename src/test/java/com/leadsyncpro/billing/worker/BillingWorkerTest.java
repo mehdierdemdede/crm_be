@@ -10,8 +10,11 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.leadsyncpro.billing.config.BillingProperties;
 import com.leadsyncpro.billing.integration.iyzico.IyzicoClient;
 import com.leadsyncpro.billing.integration.iyzico.IyzicoInvoiceResponse;
+import com.leadsyncpro.billing.metrics.SubscriptionStatusMetrics;
+import com.leadsyncpro.billing.money.MoneyRounding;
 import com.leadsyncpro.billing.service.InvoicingService;
 import com.leadsyncpro.billing.service.PricingService;
 import com.leadsyncpro.billing.service.SubscriptionService;
@@ -24,6 +27,7 @@ import com.leadsyncpro.model.billing.SeatAllocation;
 import com.leadsyncpro.model.billing.Subscription;
 import com.leadsyncpro.model.billing.SubscriptionStatus;
 import com.leadsyncpro.repository.billing.SubscriptionRepository;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -49,8 +53,10 @@ class BillingWorkerTest {
     @Mock
     private BillingNotificationPort notificationPort;
 
-    private final InvoicingService invoicingService = new InvoicingService(new PricingService());
-    private final SubscriptionService subscriptionService = new SubscriptionService();
+    private final InvoicingService invoicingService =
+            new InvoicingService(new PricingService(), new MoneyRounding(new BillingProperties()));
+    private final SubscriptionService subscriptionService =
+            new SubscriptionService(new SubscriptionStatusMetrics(new SimpleMeterRegistry()));
     private Clock clock;
     private BillingWorker billingWorker;
     private Instant now;
