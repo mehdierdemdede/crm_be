@@ -1,11 +1,11 @@
 package com.leadsyncpro.controller;
 
-import com.leadsyncpro.dto.LoginRequest;
 import com.leadsyncpro.dto.JwtAuthenticationResponse;
+import com.leadsyncpro.dto.LoginRequest;
 import com.leadsyncpro.model.User;
-import com.leadsyncpro.model.Role;
 import com.leadsyncpro.security.JwtTokenProvider;
 import com.leadsyncpro.service.UserService;
+import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -14,14 +14,11 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.security.crypto.password.PasswordEncoder;
-
-import jakarta.validation.Valid;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -52,7 +49,7 @@ public class AuthController {
                 .orElse(null);
 
         if (user == null) {
-            logger.warn("User not found or role mismatch for email: {} in organization  : {}", loginRequest.getEmail(), loginRequest.getOrganizationId());
+            logger.warn("User not found or role mismatch for email: {} in organization: {}", loginRequest.getEmail(), loginRequest.getOrganizationId());
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid credentials or organization ID.");
         }
 
@@ -74,7 +71,7 @@ public class AuthController {
     @PostMapping("/hash-password")
     public ResponseEntity<String> hashPassword(@RequestBody String plainPassword) {
         String hashedPassword = passwordEncoder.encode(plainPassword);
-        logger.info("Hashed password generated for plain text: '{}'", plainPassword);
+        logger.info("Hashed password generated for request.");
         return ResponseEntity.ok(hashedPassword);
     }
 }
