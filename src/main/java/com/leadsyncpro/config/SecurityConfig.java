@@ -91,6 +91,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/integrations/oauth2/**").permitAll()
                         .requestMatchers("/error").permitAll()
                         .requestMatchers("/favicon.ico").permitAll()
+                        .requestMatchers("/billing/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/organizations/**").hasAuthority("SUPER_ADMIN")
                         .requestMatchers("/api/languages/**").hasAnyAuthority("SUPER_ADMIN", "ADMIN")
                         .anyRequest().authenticated()

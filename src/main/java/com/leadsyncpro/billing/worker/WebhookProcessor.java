@@ -2,6 +2,8 @@ package com.leadsyncpro.billing.worker;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.leadsyncpro.billing.metrics.SubscriptionStatusMetrics;
+import io.micrometer.core.instrument.MeterRegistry;
 import com.leadsyncpro.model.billing.Invoice;
 import com.leadsyncpro.model.billing.InvoiceStatus;
 import com.leadsyncpro.model.billing.Subscription;
@@ -34,6 +36,8 @@ public class WebhookProcessor {
     private final SubscriptionRepository subscriptionRepository;
     private final InvoiceRepository invoiceRepository;
     private final ObjectMapper objectMapper;
+    private final SubscriptionStatusMetrics subscriptionStatusMetrics;
+    private final MeterRegistry meterRegistry;
 
     @Transactional
     @Retryable(
@@ -58,6 +62,7 @@ public class WebhookProcessor {
             webhookEventRepository.save(event);
         } catch (WebhookProcessingException ex) {
             log.warn("Retryable error while processing webhook {}: {}", eventId, ex.getMessage());
+            meterRegistry.counter("webhook_processor_retry_total").increment();
             throw ex;
         } catch (Exception ex) {
             log.error("Unexpected error while processing webhook {}", eventId, ex);
@@ -95,7 +100,7 @@ public class WebhookProcessor {
         findSubscription(payload)
                 .ifPresentOrElse(
                         subscription -> {
-                            subscription.setStatus(SubscriptionStatus.ACTIVE);
+                            subscriptionStatusMetrics.updateStatus(subscription, SubscriptionStatus.ACTIVE);
                             subscription.setCancelAtPeriodEnd(false);
                             subscriptionRepository.save(subscription);
                         },
@@ -106,7 +111,7 @@ public class WebhookProcessor {
         findSubscription(payload)
                 .ifPresentOrElse(
                         subscription -> {
-                            subscription.setStatus(SubscriptionStatus.PAST_DUE);
+                            subscriptionStatusMetrics.updateStatus(subscription, SubscriptionStatus.PAST_DUE);
                             subscriptionRepository.save(subscription);
                         },
                         () -> log.warn("Subscription not found for payment.failed payload"));
@@ -118,7 +123,7 @@ public class WebhookProcessor {
                 .ifPresent(subscription::setCurrentPeriodStart);
         extractInstant(payload, "currentPeriodEnd", "periodEnd", "endDate")
                 .ifPresent(subscription::setCurrentPeriodEnd);
-        subscription.setStatus(SubscriptionStatus.ACTIVE);
+        subscriptionStatusMetrics.updateStatus(subscription, SubscriptionStatus.ACTIVE);
         subscriptionRepository.save(subscription);
     }
 
@@ -128,7 +133,7 @@ public class WebhookProcessor {
                 .orElse(true);
         subscription.setCancelAtPeriodEnd(cancelAtPeriodEnd);
         if (!cancelAtPeriodEnd) {
-            subscription.setStatus(SubscriptionStatus.CANCELED);
+            subscriptionStatusMetrics.updateStatus(subscription, SubscriptionStatus.CANCELED);
         }
         subscriptionRepository.save(subscription);
     }
@@ -139,7 +144,7 @@ public class WebhookProcessor {
         invoiceRepository.save(invoice);
         findSubscription(payload)
                 .ifPresent(subscription -> {
-                    subscription.setStatus(SubscriptionStatus.ACTIVE);
+                    subscriptionStatusMetrics.updateStatus(subscription, SubscriptionStatus.ACTIVE);
                     subscriptionRepository.save(subscription);
                 });
     }
@@ -150,7 +155,7 @@ public class WebhookProcessor {
         invoiceRepository.save(invoice);
         findSubscription(payload)
                 .ifPresent(subscription -> {
-                    subscription.setStatus(SubscriptionStatus.PAST_DUE);
+                    subscriptionStatusMetrics.updateStatus(subscription, SubscriptionStatus.PAST_DUE);
                     subscriptionRepository.save(subscription);
                 });
     }

@@ -7,6 +7,10 @@ import com.leadsyncpro.billing.config.IyzicoProperties;
 import com.leadsyncpro.model.billing.Customer;
 import com.leadsyncpro.model.billing.PaymentMethod;
 import com.leadsyncpro.model.billing.Price;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
+import io.micrometer.tracing.Span;
+import io.micrometer.tracing.Tracer;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
@@ -16,6 +20,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Supplier;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import lombok.extern.slf4j.Slf4j;
@@ -34,11 +39,20 @@ public class DefaultIyzicoClient implements IyzicoClient {
     private final IyzicoProperties properties;
     private final ObjectMapper objectMapper;
     private final Options options;
+    private final MeterRegistry meterRegistry;
+    private final Tracer tracer;
 
-    public DefaultIyzicoClient(RestTemplate restTemplate, IyzicoProperties properties, ObjectMapper objectMapper) {
+    public DefaultIyzicoClient(
+            RestTemplate restTemplate,
+            IyzicoProperties properties,
+            ObjectMapper objectMapper,
+            MeterRegistry meterRegistry,
+            Tracer tracer) {
         this.restTemplate = Objects.requireNonNull(restTemplate, "restTemplate must not be null");
         this.properties = Objects.requireNonNull(properties, "properties must not be null");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
+        this.meterRegistry = Objects.requireNonNull(meterRegistry, "meterRegistry must not be null");
+        this.tracer = Objects.requireNonNull(tracer, "tracer must not be null");
         this.options = buildOptions();
 
         log.info(
@@ -53,13 +67,14 @@ public class DefaultIyzicoClient implements IyzicoClient {
         request.put("customerReferenceCode", customer.getExternalId());
         request.put("cardToken", cardToken);
         logRequest("createOrAttachPaymentMethod", request);
-        try {
-            String paymentMethodToken = cardToken;
-            logResponse("createOrAttachPaymentMethod", Map.of("paymentMethodToken", paymentMethodToken));
-            return paymentMethodToken;
-        } catch (Exception ex) {
-            throw wrap("Failed to create or attach payment method", ex);
-        }
+        return recordLatency(
+                "create_or_attach_payment_method",
+                () -> {
+                    String paymentMethodToken = cardToken;
+                    logResponse("createOrAttachPaymentMethod", Map.of("paymentMethodToken", paymentMethodToken));
+                    return paymentMethodToken;
+                },
+                "Failed to create or attach payment method");
     }
 
     @Override
@@ -71,15 +86,16 @@ public class DefaultIyzicoClient implements IyzicoClient {
         request.put("seatCount", seatCount);
         request.put("paymentMethodToken", paymentMethod.getTokenRef());
         logRequest("createSubscription", request);
-        try {
-            Instant now = Instant.now();
-            IyzicoSubscriptionResponse response =
-                    new IyzicoSubscriptionResponse(generateExternalId("sub"), now, now.plus(Duration.ofDays(30)), false);
-            logResponse("createSubscription", response);
-            return response;
-        } catch (Exception ex) {
-            throw wrap("Failed to create subscription", ex);
-        }
+        return recordLatency(
+                "create_subscription",
+                () -> {
+                    Instant now = Instant.now();
+                    IyzicoSubscriptionResponse response = new IyzicoSubscriptionResponse(
+                            generateExternalId("sub"), now, now.plus(Duration.ofDays(30)), false);
+                    logResponse("createSubscription", response);
+                    return response;
+                },
+                "Failed to create subscription");
     }
 
     @Override
@@ -90,11 +106,10 @@ public class DefaultIyzicoClient implements IyzicoClient {
         request.put("newPricingPlan", newPrice.getId() != null ? newPrice.getId().toString() : null);
         request.put("prorationBehavior", prorationBehavior.name());
         logRequest("changeSubscriptionPlan", request);
-        try {
-            logResponse("changeSubscriptionPlan", Map.of("status", "accepted"));
-        } catch (Exception ex) {
-            throw wrap("Failed to change subscription plan", ex);
-        }
+        recordLatency(
+                "change_subscription_plan",
+                () -> logResponse("changeSubscriptionPlan", Map.of("status", "accepted")),
+                "Failed to change subscription plan");
     }
 
     @Override
@@ -104,11 +119,10 @@ public class DefaultIyzicoClient implements IyzicoClient {
         request.put("seatCount", seatCount);
         request.put("prorationBehavior", prorationBehavior.name());
         logRequest("updateSeatCount", request);
-        try {
-            logResponse("updateSeatCount", Map.of("status", "accepted"));
-        } catch (Exception ex) {
-            throw wrap("Failed to update seat count", ex);
-        }
+        recordLatency(
+                "update_seat_count",
+                () -> logResponse("updateSeatCount", Map.of("status", "accepted")),
+                "Failed to update seat count");
     }
 
     @Override
@@ -117,11 +131,10 @@ public class DefaultIyzicoClient implements IyzicoClient {
         request.put("subscriptionId", externalSubscriptionId);
         request.put("cancelAtPeriodEnd", cancelAtPeriodEnd);
         logRequest("cancelSubscription", request);
-        try {
-            logResponse("cancelSubscription", Map.of("status", "accepted"));
-        } catch (Exception ex) {
-            throw wrap("Failed to cancel subscription", ex);
-        }
+        recordLatency(
+                "cancel_subscription",
+                () -> logResponse("cancelSubscription", Map.of("status", "accepted")),
+                "Failed to cancel subscription");
     }
 
     @Override
@@ -138,14 +151,15 @@ public class DefaultIyzicoClient implements IyzicoClient {
         request.put("amountCents", amountCents);
         request.put("currency", currency);
         logRequest("createInvoice", request);
-        try {
-            IyzicoInvoiceResponse response =
-                    new IyzicoInvoiceResponse(generateExternalId("inv"), periodStart, periodEnd, amountCents, currency);
-            logResponse("createInvoice", response);
-            return response;
-        } catch (Exception ex) {
-            throw wrap("Failed to create invoice", ex);
-        }
+        return recordLatency(
+                "create_invoice",
+                () -> {
+                    IyzicoInvoiceResponse response = new IyzicoInvoiceResponse(
+                            generateExternalId("inv"), periodStart, periodEnd, amountCents, currency);
+                    logResponse("createInvoice", response);
+                    return response;
+                },
+                "Failed to create invoice");
     }
 
     @Override
@@ -191,19 +205,45 @@ public class DefaultIyzicoClient implements IyzicoClient {
 
     private void logRequest(String operation, Object payload) {
         String requestId = Optional.ofNullable(MDC.get("requestId")).orElse("-");
+        String traceId = currentTraceId();
+        String spanId = currentSpanId();
         if (log.isDebugEnabled()) {
-            log.debug("requestId={} iyzico operation={} request={} ", requestId, operation, toJson(payload));
+            log.debug(
+                    "traceId={} spanId={} requestId={} iyzico operation={} request={} ",
+                    traceId,
+                    spanId,
+                    requestId,
+                    operation,
+                    toJson(payload));
         } else {
-            log.info("requestId={} iyzico operation={}", requestId, operation);
+            log.info(
+                    "traceId={} spanId={} requestId={} iyzico operation={}",
+                    traceId,
+                    spanId,
+                    requestId,
+                    operation);
         }
     }
 
     private void logResponse(String operation, Object payload) {
         String requestId = Optional.ofNullable(MDC.get("requestId")).orElse("-");
+        String traceId = currentTraceId();
+        String spanId = currentSpanId();
         if (log.isDebugEnabled()) {
-            log.debug("requestId={} iyzico operation={} response={} ", requestId, operation, toJson(payload));
+            log.debug(
+                    "traceId={} spanId={} requestId={} iyzico operation={} response={} ",
+                    traceId,
+                    spanId,
+                    requestId,
+                    operation,
+                    toJson(payload));
         } else {
-            log.info("requestId={} iyzico operation={} completed", requestId, operation);
+            log.info(
+                    "traceId={} spanId={} requestId={} iyzico operation={} completed",
+                    traceId,
+                    spanId,
+                    requestId,
+                    operation);
         }
     }
 
@@ -221,6 +261,44 @@ public class DefaultIyzicoClient implements IyzicoClient {
 
     private String generateExternalId(String prefix) {
         return prefix + "_" + UUID.randomUUID();
+    }
+
+    private <T> T recordLatency(String operation, Supplier<T> supplier, String errorMessage) {
+        Timer.Sample sample = Timer.start(meterRegistry);
+        try {
+            return supplier.get();
+        } catch (RuntimeException ex) {
+            throw wrap(errorMessage, ex);
+        } finally {
+            stopTimer(operation, sample);
+        }
+    }
+
+    private void recordLatency(String operation, Runnable runnable, String errorMessage) {
+        Timer.Sample sample = Timer.start(meterRegistry);
+        try {
+            runnable.run();
+        } catch (RuntimeException ex) {
+            throw wrap(errorMessage, ex);
+        } finally {
+            stopTimer(operation, sample);
+        }
+    }
+
+    private void stopTimer(String operation, Timer.Sample sample) {
+        sample.stop(Timer.builder("iyzico_http_client_latency")
+                .tag("operation", operation)
+                .register(meterRegistry));
+    }
+
+    private String currentTraceId() {
+        Span span = tracer.currentSpan();
+        return span != null ? span.context().traceId() : "-";
+    }
+
+    private String currentSpanId() {
+        Span span = tracer.currentSpan();
+        return span != null ? span.context().spanId() : "-";
     }
 
     private static final class MessageDigestEquality {

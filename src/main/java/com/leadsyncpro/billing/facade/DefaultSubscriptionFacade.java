@@ -3,6 +3,7 @@ package com.leadsyncpro.billing.facade;
 import com.leadsyncpro.billing.integration.iyzico.IyzicoClient;
 import com.leadsyncpro.billing.integration.iyzico.IyzicoSubscriptionResponse;
 import com.leadsyncpro.billing.integration.iyzico.ProrationBehavior;
+import com.leadsyncpro.billing.metrics.SubscriptionStatusMetrics;
 import com.leadsyncpro.billing.service.SubscriptionService;
 import com.leadsyncpro.model.billing.Customer;
 import com.leadsyncpro.model.billing.Invoice;
@@ -23,7 +24,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -34,8 +34,6 @@ import org.springframework.util.StringUtils;
 @Service
 public class DefaultSubscriptionFacade implements SubscriptionFacade {
 
-    private static final String UNKNOWN_CARD_BRAND = "TOKENIZED";
-
     private final SubscriptionRepository subscriptionRepository;
     private final CustomerRepository customerRepository;
     private final PlanRepository planRepository;
@@ -45,6 +43,7 @@ public class DefaultSubscriptionFacade implements SubscriptionFacade {
     private final InvoiceRepository invoiceRepository;
     private final SubscriptionService subscriptionService;
     private final IyzicoClient iyzicoClient;
+    private final SubscriptionStatusMetrics subscriptionStatusMetrics;
 
     public DefaultSubscriptionFacade(
             SubscriptionRepository subscriptionRepository,
@@ -55,7 +54,8 @@ public class DefaultSubscriptionFacade implements SubscriptionFacade {
             SeatAllocationRepository seatAllocationRepository,
             InvoiceRepository invoiceRepository,
             SubscriptionService subscriptionService,
-            IyzicoClient iyzicoClient) {
+            IyzicoClient iyzicoClient,
+            SubscriptionStatusMetrics subscriptionStatusMetrics) {
         this.subscriptionRepository = Objects.requireNonNull(subscriptionRepository, "subscriptionRepository");
         this.customerRepository = Objects.requireNonNull(customerRepository, "customerRepository");
         this.planRepository = Objects.requireNonNull(planRepository, "planRepository");
@@ -67,6 +67,8 @@ public class DefaultSubscriptionFacade implements SubscriptionFacade {
         this.invoiceRepository = Objects.requireNonNull(invoiceRepository, "invoiceRepository");
         this.subscriptionService = Objects.requireNonNull(subscriptionService, "subscriptionService");
         this.iyzicoClient = Objects.requireNonNull(iyzicoClient, "iyzicoClient");
+        this.subscriptionStatusMetrics =
+                Objects.requireNonNull(subscriptionStatusMetrics, "subscriptionStatusMetrics");
     }
 
     @Override
@@ -165,7 +167,7 @@ public class DefaultSubscriptionFacade implements SubscriptionFacade {
             if (cancelAtPeriodEnd) {
                 subscription.setCancelAtPeriodEnd(true);
                 if (subscription.getStatus() == SubscriptionStatus.TRIAL) {
-                    subscription.setStatus(SubscriptionStatus.ACTIVE);
+                    subscriptionStatusMetrics.updateStatus(subscription, SubscriptionStatus.ACTIVE);
                 }
             } else {
                 subscriptionService.cancel(subscription, Instant.now());
@@ -233,8 +235,6 @@ public class DefaultSubscriptionFacade implements SubscriptionFacade {
             String tokenRef = iyzicoClient.createOrAttachPaymentMethod(customer, cardToken);
             PaymentMethod paymentMethod = PaymentMethod.builder()
                     .customer(customer)
-                    .brand(UNKNOWN_CARD_BRAND)
-                    .last4(extractLast4(cardToken))
                     .tokenRef(tokenRef)
                     .defaultMethod(true)
                     .build();
@@ -256,7 +256,7 @@ public class DefaultSubscriptionFacade implements SubscriptionFacade {
         subscription.setCurrentPeriodEnd(response.currentPeriodEnd());
         subscription.setCancelAtPeriodEnd(response.cancelAtPeriodEnd());
         if (response.cancelAtPeriodEnd() && subscription.getStatus() == SubscriptionStatus.ACTIVE) {
-            subscription.setStatus(SubscriptionStatus.CANCELED);
+            subscriptionStatusMetrics.updateStatus(subscription, SubscriptionStatus.CANCELED);
         }
     }
 
@@ -347,17 +347,4 @@ public class DefaultSubscriptionFacade implements SubscriptionFacade {
         };
     }
 
-    private String extractLast4(String cardToken) {
-        String digits = cardToken.chars()
-                .filter(Character::isDigit)
-                .mapToObj(c -> String.valueOf((char) c))
-                .collect(Collectors.joining());
-        if (digits.length() >= 4) {
-            return digits.substring(digits.length() - 4);
-        }
-        String normalized = cardToken.length() >= 4
-                ? cardToken.substring(cardToken.length() - 4)
-                : String.format(Locale.ROOT, "%04d", Math.abs(cardToken.hashCode()) % 10_000);
-        return normalized.replaceAll("[^0-9]", "0");
-    }
 }

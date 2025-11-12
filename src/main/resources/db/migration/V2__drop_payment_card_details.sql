@@ -1,0 +1,3 @@
+ALTER TABLE payment_method
+    DROP COLUMN IF EXISTS brand,
+    DROP COLUMN IF EXISTS last4;
