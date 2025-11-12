@@ -41,12 +41,6 @@ public class PaymentMethod {
     @JoinColumn(name = "customer_id", nullable = false)
     private Customer customer;
 
-    @Column(nullable = false, length = 100)
-    private String brand;
-
-    @Column(nullable = false, length = 4)
-    private String last4;
-
     @Column(name = "token_ref", nullable = false, length = 255)
     private String tokenRef;
 

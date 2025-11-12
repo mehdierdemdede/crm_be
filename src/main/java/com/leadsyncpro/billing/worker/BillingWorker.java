@@ -2,6 +2,7 @@ package com.leadsyncpro.billing.worker;
 
 import com.leadsyncpro.billing.integration.iyzico.IyzicoClient;
 import com.leadsyncpro.billing.integration.iyzico.IyzicoInvoiceResponse;
+import com.leadsyncpro.billing.metrics.SubscriptionStatusMetrics;
 import com.leadsyncpro.billing.service.InvoicingService;
 import com.leadsyncpro.billing.service.SubscriptionService;
 import com.leadsyncpro.model.billing.Price;
@@ -33,6 +34,7 @@ public class BillingWorker {
     private final SubscriptionService subscriptionService;
     private final BillingNotificationPort notificationPort;
     private final Clock clock;
+    private final SubscriptionStatusMetrics subscriptionStatusMetrics;
 
     public BillingWorker(
             SubscriptionRepository subscriptionRepository,
@@ -40,13 +42,16 @@ public class BillingWorker {
             IyzicoClient iyzicoClient,
             SubscriptionService subscriptionService,
             BillingNotificationPort notificationPort,
-            Clock clock) {
+            Clock clock,
+            SubscriptionStatusMetrics subscriptionStatusMetrics) {
         this.subscriptionRepository = Objects.requireNonNull(subscriptionRepository, "subscriptionRepository");
         this.invoicingService = Objects.requireNonNull(invoicingService, "invoicingService");
         this.iyzicoClient = Objects.requireNonNull(iyzicoClient, "iyzicoClient");
         this.subscriptionService = Objects.requireNonNull(subscriptionService, "subscriptionService");
         this.notificationPort = Objects.requireNonNull(notificationPort, "notificationPort");
         this.clock = clock == null ? Clock.system(ZoneOffset.UTC) : clock;
+        this.subscriptionStatusMetrics =
+                Objects.requireNonNull(subscriptionStatusMetrics, "subscriptionStatusMetrics");
     }
 
     @Scheduled(cron = "0 0 3 * * *")
@@ -131,7 +136,7 @@ public class BillingWorker {
     }
 
     private void markSubscriptionActive(Subscription subscription, InvoicingService.InvoiceContext context) {
-        subscription.setStatus(SubscriptionStatus.ACTIVE);
+        subscriptionStatusMetrics.updateStatus(subscription, SubscriptionStatus.ACTIVE);
         subscription.setCancelAtPeriodEnd(false);
         subscription.setCurrentPeriodStart(context.periodStart());
         subscription.setCurrentPeriodEnd(context.periodEnd());

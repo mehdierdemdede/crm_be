@@ -1,5 +1,6 @@
 package com.leadsyncpro.billing.service;
 
+import com.leadsyncpro.billing.metrics.SubscriptionStatusMetrics;
 import com.leadsyncpro.model.billing.Customer;
 import com.leadsyncpro.model.billing.Plan;
 import com.leadsyncpro.model.billing.Price;
@@ -16,6 +17,12 @@ import java.util.Objects;
  * Encapsulates domain operations for subscription lifecycle management.
  */
 public class SubscriptionService {
+
+    private final SubscriptionStatusMetrics statusMetrics;
+
+    public SubscriptionService(SubscriptionStatusMetrics statusMetrics) {
+        this.statusMetrics = statusMetrics;
+    }
 
     public Subscription create(
             Customer customer,
@@ -69,7 +76,7 @@ public class SubscriptionService {
         if (trialEndAt == null || activationTime.isBefore(trialEndAt)) {
             throw new IllegalStateException("Trial period has not ended yet");
         }
-        subscription.setStatus(SubscriptionStatus.ACTIVE);
+        statusMetrics.updateStatus(subscription, SubscriptionStatus.ACTIVE);
         subscription.setCurrentPeriodStart(activationTime);
         subscription.setCurrentPeriodEnd(null);
     }
@@ -153,7 +160,7 @@ public class SubscriptionService {
             throw new IllegalStateException(
                     "Cannot transition subscription from " + current + " to " + targetStatus);
         }
-        subscription.setStatus(targetStatus);
+        statusMetrics.updateStatus(subscription, targetStatus);
     }
 
     private boolean isTransitionAllowed(SubscriptionStatus current, SubscriptionStatus target) {
