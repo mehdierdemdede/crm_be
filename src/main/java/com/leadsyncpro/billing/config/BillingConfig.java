@@ -15,6 +15,7 @@ import com.leadsyncpro.repository.billing.PlanRepository;
 import com.leadsyncpro.repository.billing.PriceRepository;
 import com.leadsyncpro.repository.billing.SeatAllocationRepository;
 import com.leadsyncpro.repository.billing.SubscriptionRepository;
+import java.time.Clock;
 import java.time.Duration;
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Bean;
@@ -61,6 +62,11 @@ public class BillingConfig {
     @Bean
     public InvoicingService invoicingService(PricingService pricingService) {
         return new InvoicingService(pricingService);
+    }
+
+    @Bean
+    public Clock systemClock() {
+        return Clock.systemUTC();
     }
 
     @Bean

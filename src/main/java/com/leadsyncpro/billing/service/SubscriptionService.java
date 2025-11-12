@@ -6,6 +6,7 @@ import com.leadsyncpro.model.billing.Price;
 import com.leadsyncpro.model.billing.SeatAllocation;
 import com.leadsyncpro.model.billing.Subscription;
 import com.leadsyncpro.model.billing.SubscriptionStatus;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -15,6 +16,17 @@ import java.util.Objects;
  * Encapsulates domain operations for subscription lifecycle management.
  */
 public class SubscriptionService {
+
+    public Subscription create(
+            Customer customer,
+            Plan plan,
+            Price price,
+            int seatCount,
+            Instant startAt,
+            Integer trialDays) {
+        Instant trialEndAt = resolveTrialEnd(startAt, trialDays);
+        return create(customer, plan, price, seatCount, startAt, trialEndAt);
+    }
 
     public Subscription create(
             Customer customer,
@@ -44,6 +56,22 @@ public class SubscriptionService {
 
         attachSeatAllocation(subscription, seatCount, startAt);
         return subscription;
+    }
+
+    public void activateTrial(Subscription subscription, Instant activationTime) {
+        Objects.requireNonNull(subscription, "subscription must not be null");
+        Objects.requireNonNull(activationTime, "activationTime must not be null");
+        ensureNotCanceled(subscription);
+        if (subscription.getStatus() != SubscriptionStatus.TRIAL) {
+            throw new IllegalStateException("Subscription is not in trial status");
+        }
+        Instant trialEndAt = subscription.getTrialEndAt();
+        if (trialEndAt == null || activationTime.isBefore(trialEndAt)) {
+            throw new IllegalStateException("Trial period has not ended yet");
+        }
+        subscription.setStatus(SubscriptionStatus.ACTIVE);
+        subscription.setCurrentPeriodStart(activationTime);
+        subscription.setCurrentPeriodEnd(null);
     }
 
     public void changePlan(Subscription subscription, Plan newPlan, Price newPrice, Instant effectiveFrom) {
@@ -145,5 +173,12 @@ public class SubscriptionService {
             return SubscriptionStatus.TRIAL;
         }
         return SubscriptionStatus.ACTIVE;
+    }
+
+    private Instant resolveTrialEnd(Instant startAt, Integer trialDays) {
+        if (trialDays == null || trialDays <= 0) {
+            return null;
+        }
+        return startAt.plus(Duration.ofDays(trialDays));
     }
 }

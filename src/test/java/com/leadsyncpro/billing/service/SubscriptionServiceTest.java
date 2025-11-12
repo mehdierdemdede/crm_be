@@ -33,7 +33,7 @@ class SubscriptionServiceTest {
         Instant trialEnd = start.plus(14, ChronoUnit.DAYS);
 
         Subscription subscription =
-                subscriptionService.create(customer, plan, price, 5, start, trialEnd);
+                subscriptionService.create(customer, plan, price, 5, start, 14);
 
         assertSame(customer, subscription.getCustomer());
         assertSame(plan, subscription.getPlan());
@@ -66,6 +66,40 @@ class SubscriptionServiceTest {
         assertEquals(SubscriptionStatus.ACTIVE, subscription.getStatus());
         assertEquals(effectiveFrom, subscription.getCurrentPeriodStart());
         assertNull(subscription.getCurrentPeriodEnd());
+    }
+
+    @Test
+    void createShouldReturnActiveWhenTrialDaysMissing() {
+        Customer customer = createCustomer();
+        Plan plan = createPlan("basic");
+        Price price = createPrice(plan, 1_000L, 200L);
+        Instant start = Instant.parse("2024-01-01T00:00:00Z");
+
+        Subscription subscription = subscriptionService.create(customer, plan, price, 5, start, (Integer) null);
+
+        assertEquals(SubscriptionStatus.ACTIVE, subscription.getStatus());
+        assertNull(subscription.getTrialEndAt());
+    }
+
+    @Test
+    void activateTrialShouldTransitionToActiveWhenTrialEnds() {
+        Subscription subscription = createTrialSubscription();
+        Instant trialEnd = subscription.getTrialEndAt();
+
+        subscriptionService.activateTrial(subscription, trialEnd);
+
+        assertEquals(SubscriptionStatus.ACTIVE, subscription.getStatus());
+        assertEquals(trialEnd, subscription.getCurrentPeriodStart());
+    }
+
+    @Test
+    void activateTrialShouldRejectEarlyActivation() {
+        Subscription subscription = createTrialSubscription();
+        Instant beforeEnd = subscription.getTrialEndAt().minus(1, ChronoUnit.DAYS);
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> subscriptionService.activateTrial(subscription, beforeEnd));
     }
 
     @Test
@@ -134,8 +168,7 @@ class SubscriptionServiceTest {
         Plan plan = createPlan("basic");
         Price price = createPrice(plan, 1_000L, 200L);
         Instant start = Instant.parse("2024-01-01T00:00:00Z");
-        Instant trialEnd = start.plus(14, ChronoUnit.DAYS);
-        return subscriptionService.create(customer, plan, price, 5, start, trialEnd);
+        return subscriptionService.create(customer, plan, price, 5, start, 14);
     }
 
     private Subscription createActiveSubscription() {
