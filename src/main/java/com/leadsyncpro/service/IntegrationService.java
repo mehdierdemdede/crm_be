@@ -17,7 +17,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.oauth2.client.registration.ClientRegistration;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.stereotype.Service;
@@ -965,11 +964,9 @@ public class IntegrationService {
 
 
     /**
-     * Süresi dolmuş token'ları yenilemek ve aktif entegrasyonlara sahip tüm organizasyonlar için lead'leri çekmek için zamanlanmış görev.
-     * Bu basit bir örnektir; gerçek bir uygulamada bunu daha sağlam bir şekilde yönetirsiniz (örn. organizasyon başına zamanlama).
+     * Süresi dolmuş token'ları yenilemek ve aktif entegrasyonlara sahip tüm organizasyonlar için lead'leri çekmek için kullanılan yardımcı
+     * metot. Varsayılan davranışta otomatik olarak zamanlanmaz; ön yüzden gelen manuel tetiklemeler için kullanılmalıdır.
      */
-
-    @Scheduled(fixedRate = 3600000) // Her saat çalıştır (3600000 ms)
     public void scheduledLeadSync() {
         logger.info("Tüm organizasyonlar için zamanlanmış lead senkronizasyonu başlatılıyor.");
         List<IntegrationConfig> configs = integrationConfigRepository.findAll(); // Tüm yapılandırmaları çeker
