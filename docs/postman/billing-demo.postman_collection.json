@@ -1,0 +1,176 @@
+{
+  "info": {
+    "name": "Billing Demo Collection",
+    "description": "Demo workflow covering subscription lifecycle operations against the LeadSyncPro billing API.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Create subscription",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "name": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"customerId\": \"{{customerId}}\",\n  \"planCode\": \"BASIC\",\n  \"billingPeriod\": \"MONTH\",\n  \"seatCount\": 5,\n  \"trialDays\": 0,\n  \"cardToken\": \"tok_demo_123\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/billing/subscriptions",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "billing",
+            "subscriptions"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const jsonData = pm.response.json();",
+              "if (jsonData && jsonData.id) {",
+              "  pm.collectionVariables.set('subscriptionId', jsonData.id);",
+              "}",
+              "if (jsonData && jsonData.externalSubscriptionId) {",
+              "  pm.collectionVariables.set('externalSubscriptionId', jsonData.externalSubscriptionId);",
+              "}",
+              "pm.test('Subscription created', function () {",
+              "  pm.expect(jsonData.planCode).to.eql('BASIC');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Change plan",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "name": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"planCode\": \"PRO\",\n  \"billingPeriod\": \"YEAR\",\n  \"proration\": \"IMMEDIATE\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/billing/subscriptions/{{subscriptionId}}/change-plan",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "billing",
+            "subscriptions",
+            "{{subscriptionId}}",
+            "change-plan"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Update seat count",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "name": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"seatCount\": 15,\n  \"proration\": \"IMMEDIATE\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/billing/subscriptions/{{subscriptionId}}/seats",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "billing",
+            "subscriptions",
+            "{{subscriptionId}}",
+            "seats"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Cancel subscription",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "name": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"cancelAtPeriodEnd\": true\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/billing/subscriptions/{{subscriptionId}}/cancel",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "billing",
+            "subscriptions",
+            "{{subscriptionId}}",
+            "cancel"
+          ]
+        }
+      }
+    },
+    {
+      "name": "List customer invoices",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/billing/customers/{{customerId}}/invoices",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "billing",
+            "customers",
+            "{{customerId}}",
+            "invoices"
+          ]
+        }
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "customerId",
+      "value": "3d4e5f6a-7b8c-4d9e-0f1a-2b3c4d5e6f70"
+    },
+    {
+      "key": "subscriptionId",
+      "value": "5f6a7b8c-9d0e-4f1a-2b3c-4d5e6f708192"
+    }
+  ]
+}
