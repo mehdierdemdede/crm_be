@@ -1,5 +1,6 @@
 billing:
   currency: TRY
+  timezone: Europe/Istanbul
 iyzico:
   api-key: ${IYZICO_API_KEY:}
   secret-key: ${IYZICO_SECRET_KEY:}

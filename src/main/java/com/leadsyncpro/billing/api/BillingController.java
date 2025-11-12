@@ -1,5 +1,6 @@
 package com.leadsyncpro.billing.api;
 
+import com.leadsyncpro.billing.api.idempotency.IdempotentEndpoint;
 import com.leadsyncpro.billing.facade.ChangePlanCmd;
 import com.leadsyncpro.billing.facade.CreateSubscriptionCmd;
 import com.leadsyncpro.billing.facade.InvoiceDto;
@@ -126,6 +127,7 @@ public class BillingController {
                                         schema = @Schema(implementation = ProblemDetail.class)))
             })
     @PostMapping("/subscriptions")
+    @IdempotentEndpoint
     @ResponseStatus(HttpStatus.CREATED)
     public SubscriptionResponse createSubscription(
             @Valid @org.springframework.web.bind.annotation.RequestBody CreateSubscriptionRequest request) {

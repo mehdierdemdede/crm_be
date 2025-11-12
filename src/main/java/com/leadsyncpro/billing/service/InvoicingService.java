@@ -193,7 +193,7 @@ public class InvoicingService {
         }
         BigDecimal prorated = BigDecimal.valueOf(baseAmount)
                 .multiply(BigDecimal.valueOf(remainingDays))
-                .divide(BigDecimal.valueOf(totalDays), 0, RoundingMode.HALF_UP);
-        return prorated.longValue();
+                .divide(BigDecimal.valueOf(totalDays), 6, RoundingMode.HALF_UP);
+        return MoneyUtil.roundHalfUp(prorated);
     }
 }
