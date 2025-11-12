@@ -1,9 +1,0 @@
-billing:
-  currency: TRY
-  timezone: Europe/Istanbul
-  rounding: HALF_UP
-iyzico:
-  api-key: ${IYZICO_API_KEY:}
-  secret-key: ${IYZICO_SECRET_KEY:}
-  base-url: ${IYZICO_BASE_URL:https://sandbox-api.iyzipay.com}
-  webhook-signing-secret: ${IYZICO_WEBHOOK_SIGNING_SECRET:}
