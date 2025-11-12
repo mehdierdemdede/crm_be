@@ -879,9 +879,12 @@ public class IntegrationService {
 
                                     if (existingOpt.isPresent()) {
                                         Lead existing = existingOpt.get();
+                                        boolean wasAssigned = existing.getAssignedToUser() != null;
                                         updateLeadFields(existing, fbLead, formName, formId, pageId);
                                         leadRepository.save(existing);
-                                        autoAssignService.assignLeadAutomatically(existing);
+                                        if (!wasAssigned && existing.getAssignedToUser() == null) {
+                                            autoAssignService.assignLeadAutomatically(existing);
+                                        }
                                         logger.info("Updated existing Facebook lead {}", fbLeadId);
                                         result.add(existing);
                                         updatedCount++;
@@ -895,7 +898,7 @@ public class IntegrationService {
                                     Instant leadCreatedAt = parseInstant(asString(fbLead.get("created_time")));
                                     if (lastSyncedLeadCreatedAt != null
                                             && leadCreatedAt != null
-                                            && leadCreatedAt.isBefore(lastSyncedLeadCreatedAt)) {
+                                            && !leadCreatedAt.isAfter(lastSyncedLeadCreatedAt)) {
                                         logger.debug("Facebook lead {} daha önce senkronize edilmiş, atlanıyor.", fbLeadId);
                                         continue;
                                     }
