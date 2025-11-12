@@ -71,7 +71,8 @@ dependencies {
         testImplementation 'org.springframework.boot:spring-boot-starter-test'
         testImplementation 'com.h2database:h2'
         testImplementation 'org.springframework.security:spring-security-test'
-	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+        testImplementation 'com.github.tomakehurst:wiremock-jre8:2.35.1'
+        testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
 tasks.named('test') {
