@@ -1,5 +1,6 @@
 package com.leadsyncpro.billing.service;
 
+import com.leadsyncpro.billing.money.MoneyRounding;
 import com.leadsyncpro.model.billing.Price;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -13,9 +14,11 @@ import java.util.Objects;
 public class InvoicingService {
 
     private final PricingService pricingService;
+    private final MoneyRounding moneyRounding;
 
-    public InvoicingService(PricingService pricingService) {
+    public InvoicingService(PricingService pricingService, MoneyRounding moneyRounding) {
         this.pricingService = Objects.requireNonNull(pricingService, "pricingService must not be null");
+        this.moneyRounding = Objects.requireNonNull(moneyRounding, "moneyRounding must not be null");
     }
 
     /**
@@ -194,6 +197,6 @@ public class InvoicingService {
         BigDecimal prorated = BigDecimal.valueOf(baseAmount)
                 .multiply(BigDecimal.valueOf(remainingDays))
                 .divide(BigDecimal.valueOf(totalDays), 6, RoundingMode.HALF_UP);
-        return MoneyUtil.roundHalfUp(prorated);
+        return moneyRounding.roundToMinorUnit(prorated);
     }
 }

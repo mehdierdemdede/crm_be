@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.leadsyncpro.billing.metrics.SubscriptionStatusMetrics;
 import com.leadsyncpro.model.billing.BillingPeriod;
 import com.leadsyncpro.model.billing.Customer;
 import com.leadsyncpro.model.billing.CustomerStatus;
@@ -18,11 +19,13 @@ import com.leadsyncpro.model.billing.SubscriptionStatus;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 
 class SubscriptionServiceTest {
 
-    private final SubscriptionService subscriptionService = new SubscriptionService();
+    private final SubscriptionService subscriptionService =
+            new SubscriptionService(new SubscriptionStatusMetrics(new SimpleMeterRegistry()));
 
     @Test
     void createShouldInitialiseTrialSubscription() {
