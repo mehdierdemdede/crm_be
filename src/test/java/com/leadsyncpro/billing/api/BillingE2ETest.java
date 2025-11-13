@@ -60,7 +60,7 @@ class BillingE2ETest {
 
     @Test
     void listPublicPlans_isAccessibleWithoutAuthentication() throws Exception {
-        MvcResult result = mockMvc.perform(get("/billing/public/plans"))
+        MvcResult result = mockMvc.perform(get("/api/billing/public/plans"))
                 .andExpect(status().isOk())
                 .andReturn();
 
@@ -88,7 +88,7 @@ class BillingE2ETest {
     @Test
     @WithMockUser(roles = "ADMIN")
     void getInvoiceDetails_returnsInvoicePayload() throws Exception {
-        mockMvc.perform(get("/billing/invoices/" + INVOICE_ID))
+        mockMvc.perform(get("/api/billing/invoices/" + INVOICE_ID))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(INVOICE_ID.toString()))
                 .andExpect(jsonPath("$.subtotalCents").value(99000))
@@ -109,7 +109,7 @@ class BillingE2ETest {
                 "expireYear", "2026",
                 "cvc", "123");
 
-        mockMvc.perform(post("/payment-methods/tokenize")
+        mockMvc.perform(post("/api/payment-methods/tokenize")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
@@ -131,7 +131,7 @@ class BillingE2ETest {
         createRequest.put("trialDays", 0);
         createRequest.put("cardToken", "tok_demo_123");
 
-        MvcResult createResult = mockMvc.perform(post("/billing/subscriptions")
+        MvcResult createResult = mockMvc.perform(post("/api/billing/subscriptions")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated())
@@ -149,7 +149,7 @@ class BillingE2ETest {
                 "billingPeriod", "YEAR",
                 "proration", "IMMEDIATE");
 
-        mockMvc.perform(post("/billing/subscriptions/" + subscriptionId + "/change-plan")
+        mockMvc.perform(post("/api/billing/subscriptions/" + subscriptionId + "/change-plan")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(changePlanRequest)))
                 .andExpect(status().isOk())
@@ -158,7 +158,7 @@ class BillingE2ETest {
 
         Map<String, Object> seatUpdateRequest = Map.of("seatCount", 15, "proration", "IMMEDIATE");
 
-        mockMvc.perform(post("/billing/subscriptions/" + subscriptionId + "/seats")
+        mockMvc.perform(post("/api/billing/subscriptions/" + subscriptionId + "/seats")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(seatUpdateRequest)))
                 .andExpect(status().isOk())
@@ -166,16 +166,16 @@ class BillingE2ETest {
 
         Map<String, Object> cancelRequest = Map.of("cancelAtPeriodEnd", true);
 
-        mockMvc.perform(post("/billing/subscriptions/" + subscriptionId + "/cancel")
+        mockMvc.perform(post("/api/billing/subscriptions/" + subscriptionId + "/cancel")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(cancelRequest)))
                 .andExpect(status().isNoContent());
 
-        mockMvc.perform(get("/billing/subscriptions/" + subscriptionId))
+        mockMvc.perform(get("/api/billing/subscriptions/" + subscriptionId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.cancelAtPeriodEnd").value(true));
 
-        mockMvc.perform(get("/billing/customers/" + CUSTOMER_ID + "/invoices"))
+        mockMvc.perform(get("/api/billing/customers/" + CUSTOMER_ID + "/invoices"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].currency").value("TRY"));
 

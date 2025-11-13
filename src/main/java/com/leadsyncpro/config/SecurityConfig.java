@@ -92,7 +92,7 @@ public class SecurityConfig {
                         .requestMatchers("/billing/public/**", "/api/billing/public/**").permitAll()
                         .requestMatchers("/error").permitAll()
                         .requestMatchers("/favicon.ico").permitAll()
-                        .requestMatchers("/billing/admin/**").hasRole("ADMIN")
+                        .requestMatchers("/billing/admin/**", "/api/billing/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/organizations/**").hasAuthority("SUPER_ADMIN")
                         .requestMatchers("/api/languages/**").hasAnyAuthority("SUPER_ADMIN", "ADMIN")
                         .anyRequest().authenticated()

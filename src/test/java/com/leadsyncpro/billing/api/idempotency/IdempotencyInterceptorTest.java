@@ -37,7 +37,7 @@ class IdempotencyInterceptorTest {
     @Test
     void replaysStoredResponseWhenHashesMatch() throws Exception {
         String body = "{\"customerId\":\"1\"}";
-        String hash = hash("POST", "/billing/subscriptions", body.getBytes(StandardCharsets.UTF_8));
+        String hash = hash("POST", "/api/billing/subscriptions", body.getBytes(StandardCharsets.UTF_8));
         IdempotencyEntry entry = IdempotencyEntry.builder()
                 .id(UUID.randomUUID())
                 .idempotencyKey("key-1")
@@ -50,7 +50,7 @@ class IdempotencyInterceptorTest {
 
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.setMethod("POST");
-        request.setRequestURI("/billing/subscriptions");
+        request.setRequestURI("/api/billing/subscriptions");
         request.addHeader("Idempotency-Key", "key-1");
         request.setContent(body.getBytes(StandardCharsets.UTF_8));
         CachedBodyHttpServletRequest cachedRequest = new CachedBodyHttpServletRequest(request);
@@ -68,7 +68,7 @@ class IdempotencyInterceptorTest {
     void throwsConflictWhenHashesDiffer() throws Exception {
         String body = "{\"customerId\":\"1\"}";
         String differentBody = "{\"customerId\":\"2\"}";
-        String hash = hash("POST", "/billing/subscriptions", body.getBytes(StandardCharsets.UTF_8));
+        String hash = hash("POST", "/api/billing/subscriptions", body.getBytes(StandardCharsets.UTF_8));
         IdempotencyEntry entry = IdempotencyEntry.builder()
                 .id(UUID.randomUUID())
                 .idempotencyKey("key-2")
@@ -79,7 +79,7 @@ class IdempotencyInterceptorTest {
 
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.setMethod("POST");
-        request.setRequestURI("/billing/subscriptions");
+        request.setRequestURI("/api/billing/subscriptions");
         request.addHeader("Idempotency-Key", "key-2");
         request.setContent(differentBody.getBytes(StandardCharsets.UTF_8));
         CachedBodyHttpServletRequest cachedRequest = new CachedBodyHttpServletRequest(request);
@@ -93,7 +93,7 @@ class IdempotencyInterceptorTest {
         String body = "{\"customerId\":\"3\"}";
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.setMethod("POST");
-        request.setRequestURI("/billing/subscriptions");
+        request.setRequestURI("/api/billing/subscriptions");
         request.addHeader("Idempotency-Key", "key-3");
         request.setContent(body.getBytes(StandardCharsets.UTF_8));
         CachedBodyHttpServletRequest cachedRequest = new CachedBodyHttpServletRequest(request);
