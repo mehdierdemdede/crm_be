@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/payment-methods")
+@RequestMapping({"/payment-methods", "/api/payment-methods"})
 @Validated
 @Tag(name = "Payment Methods", description = "Operations related to payment method tokenization")
 public class PaymentMethodController {

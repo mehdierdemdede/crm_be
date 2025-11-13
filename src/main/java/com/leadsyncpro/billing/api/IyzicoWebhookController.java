@@ -25,7 +25,7 @@ import org.springframework.web.server.ResponseStatusException;
 @Slf4j
 @RestController
 @RequiredArgsConstructor
-@RequestMapping(path = "/webhooks", consumes = MediaType.APPLICATION_JSON_VALUE)
+@RequestMapping(path = {"/webhooks", "/api/webhooks"}, consumes = MediaType.APPLICATION_JSON_VALUE)
 public class IyzicoWebhookController {
 
     private final IyzicoClient iyzicoClient;

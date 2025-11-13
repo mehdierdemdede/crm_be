@@ -34,7 +34,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/billing")
+@RequestMapping({"/billing", "/api/billing"})
 @Validated
 @Tag(name = "Billing", description = "Subscription lifecycle management endpoints")
 public class BillingController {
