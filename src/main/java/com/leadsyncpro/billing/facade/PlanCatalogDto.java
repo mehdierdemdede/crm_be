@@ -1,6 +1,7 @@
 package com.leadsyncpro.billing.facade;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 public record PlanCatalogDto(
@@ -8,4 +9,6 @@ public record PlanCatalogDto(
         String code,
         String name,
         String description,
+        List<String> features,
+        Map<String, Object> metadata,
         List<PlanPriceDto> prices) {}

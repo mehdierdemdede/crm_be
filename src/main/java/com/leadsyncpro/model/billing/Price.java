@@ -56,6 +56,12 @@ public class Price {
     @Column(nullable = false, length = 10)
     private String currency;
 
+    @Column(name = "seat_limit")
+    private Integer seatLimit;
+
+    @Column(name = "trial_days")
+    private Integer trialDays;
+
     @Builder.Default
     @OneToMany(mappedBy = "price", fetch = FetchType.LAZY)
     private List<Subscription> subscriptions = new ArrayList<>();
