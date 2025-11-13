@@ -9,6 +9,9 @@ public interface IyzicoClient {
 
     String createOrAttachPaymentMethod(Customer customer, String cardToken);
 
+    String tokenizePaymentMethod(
+            String cardHolderName, String cardNumber, String expireMonth, String expireYear, String cvc);
+
     IyzicoSubscriptionResponse createSubscription(
             Customer customer, Price price, int seatCount, PaymentMethod paymentMethod);
 

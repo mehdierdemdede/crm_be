@@ -78,6 +78,26 @@ public class DefaultIyzicoClient implements IyzicoClient {
     }
 
     @Override
+    public String tokenizePaymentMethod(
+            String cardHolderName, String cardNumber, String expireMonth, String expireYear, String cvc) {
+        Map<String, Object> request = new HashMap<>();
+        request.put("cardHolderName", cardHolderName);
+        request.put("cardNumber", maskCardNumber(cardNumber));
+        request.put("expireMonth", expireMonth);
+        request.put("expireYear", expireYear);
+        request.put("cvc", "***");
+        logRequest("tokenizePaymentMethod", request);
+        return recordLatency(
+                "tokenize_payment_method",
+                () -> {
+                    String token = generateExternalId("tok");
+                    logResponse("tokenizePaymentMethod", Map.of("token", token));
+                    return token;
+                },
+                "Failed to tokenize payment method");
+    }
+
+    @Override
     public IyzicoSubscriptionResponse createSubscription(
             Customer customer, Price price, int seatCount, PaymentMethod paymentMethod) {
         Map<String, Object> request = new HashMap<>();
@@ -261,6 +281,18 @@ public class DefaultIyzicoClient implements IyzicoClient {
 
     private String generateExternalId(String prefix) {
         return prefix + "_" + UUID.randomUUID();
+    }
+
+    private String maskCardNumber(String cardNumber) {
+        if (!StringUtils.hasText(cardNumber)) {
+            return null;
+        }
+        String digitsOnly = cardNumber.replaceAll("\\D", "");
+        if (digitsOnly.length() <= 4) {
+            return digitsOnly;
+        }
+        String maskedPrefix = "*".repeat(digitsOnly.length() - 4);
+        return maskedPrefix + digitsOnly.substring(digitsOnly.length() - 4);
     }
 
     private <T> T recordLatency(String operation, Supplier<T> supplier, String errorMessage) {

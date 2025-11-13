@@ -18,8 +18,11 @@ import com.github.tomakehurst.wiremock.WireMockServer;
 import com.leadsyncpro.billing.support.WireMockIyzicoTestConfig;
 import java.time.Instant;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,6 +41,7 @@ class BillingE2ETest {
 
     private static final UUID CUSTOMER_ID = UUID.fromString("3d4e5f6a-7b8c-4d9e-0f1a-2b3c4d5e6f70");
     private static final String EXTERNAL_SUBSCRIPTION_ID = "sub_wiremock_123";
+    private static final UUID INVOICE_ID = UUID.fromString("7b8c9d0e-1f2a-4b3c-5d6e-7f8091a2b3c4");
 
     @Autowired
     private MockMvc mockMvc;
@@ -52,6 +56,62 @@ class BillingE2ETest {
     void setUp() {
         resetAllRequests();
         wireMockServer.resetAll();
+    }
+
+    @Test
+    void listPublicPlans_isAccessibleWithoutAuthentication() throws Exception {
+        MvcResult result = mockMvc.perform(get("/billing/public/plans"))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        JsonNode payload = objectMapper.readTree(result.getResponse().getContentAsString());
+        assertThat(payload.isArray()).isTrue();
+
+        List<String> planCodes = StreamSupport.stream(payload.spliterator(), false)
+                .map(node -> node.get("code").asText())
+                .collect(Collectors.toList());
+        assertThat(planCodes).contains("BASIC", "PRO");
+
+        JsonNode basicPlan = StreamSupport.stream(payload.spliterator(), false)
+                .filter(node -> "BASIC".equals(node.get("code").asText()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("BASIC plan not found"));
+
+        assertThat(basicPlan.get("prices").isArray()).isTrue();
+        assertThat(basicPlan.get("prices").get(0).get("currency").asText()).isEqualTo("TRY");
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void getInvoiceDetails_returnsInvoicePayload() throws Exception {
+        mockMvc.perform(get("/billing/invoices/" + INVOICE_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(INVOICE_ID.toString()))
+                .andExpect(jsonPath("$.subtotalCents").value(99000))
+                .andExpect(jsonPath("$.taxCents").value(18810))
+                .andExpect(jsonPath("$.externalInvoiceId").value("inv_demo_001"));
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void tokenizePaymentMethod_returnsGatewayToken() throws Exception {
+        wireMockServer.stubFor(post(urlEqualTo("/v1/payment-method-tokens"))
+                .willReturn(okJson("{\"token\":\"tok_wiremock_456\"}")));
+
+        Map<String, Object> request = Map.of(
+                "cardHolderName", "Ada Lovelace",
+                "cardNumber", "5528790000000008",
+                "expireMonth", "01",
+                "expireYear", "2026",
+                "cvc", "123");
+
+        mockMvc.perform(post("/payment-methods/tokenize")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.token").value("tok_wiremock_456"));
+
+        wireMockServer.verify(postRequestedFor(urlEqualTo("/v1/payment-method-tokens")));
     }
 
     @Test
