@@ -5,6 +5,8 @@ import com.leadsyncpro.billing.api.idempotency.IdempotencyKeyMissingException;
 import com.leadsyncpro.billing.integration.iyzico.IyzicoException;
 import com.leadsyncpro.billing.facade.SubscriptionNotFoundException;
 import com.leadsyncpro.billing.facade.SubscriptionOperationException;
+import com.leadsyncpro.billing.service.PlanConflictException;
+import com.leadsyncpro.billing.service.PlanValidationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
@@ -47,5 +49,19 @@ public class BillingApiExceptionHandler {
         ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_GATEWAY, ex.getMessage());
         detail.setTitle("Payment gateway error");
         return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(detail);
+    }
+
+    @ExceptionHandler(PlanConflictException.class)
+    public ResponseEntity<ProblemDetail> handlePlanConflict(PlanConflictException ex) {
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        detail.setTitle("Plan conflict");
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(detail);
+    }
+
+    @ExceptionHandler(PlanValidationException.class)
+    public ResponseEntity<ProblemDetail> handlePlanValidation(PlanValidationException ex) {
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        detail.setTitle("Plan validation failed");
+        return ResponseEntity.badRequest().body(detail);
     }
 }
