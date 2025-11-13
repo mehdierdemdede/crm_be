@@ -1,9 +1,13 @@
 package com.leadsyncpro.billing.api;
 
 import com.leadsyncpro.billing.api.idempotency.IdempotentEndpoint;
+import com.leadsyncpro.billing.facade.BillingCatalogFacade;
 import com.leadsyncpro.billing.facade.ChangePlanCmd;
 import com.leadsyncpro.billing.facade.CreateSubscriptionCmd;
+import com.leadsyncpro.billing.facade.InvoiceDetailDto;
 import com.leadsyncpro.billing.facade.InvoiceDto;
+import com.leadsyncpro.billing.facade.PlanCatalogDto;
+import com.leadsyncpro.billing.facade.PlanPriceDto;
 import com.leadsyncpro.billing.facade.Proration;
 import com.leadsyncpro.billing.facade.SubscriptionDto;
 import com.leadsyncpro.billing.facade.SubscriptionFacade;
@@ -77,10 +81,52 @@ public class BillingController {
     private static final String CANCEL_SUBSCRIPTION_REQUEST_EXAMPLE =
             "{\n  \"cancelAtPeriodEnd\": true\n}";
 
-    private final SubscriptionFacade subscriptionFacade;
+    private static final String PLAN_RESPONSE_EXAMPLE =
+            "{\n"
+                    + "  \"id\": \"5d3c7f8b-8a8c-4f2e-9f8f-9b0c1d2e3f01\",\n"
+                    + "  \"code\": \"BASIC\",\n"
+                    + "  \"name\": \"Basic Plan\",\n"
+                    + "  \"description\": \"Entry level plan for growing teams\",\n"
+                    + "  \"prices\": [\n"
+                    + "    {\n"
+                    + "      \"id\": \"8c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e50\",\n"
+                    + "      \"billingPeriod\": \"MONTH\",\n"
+                    + "      \"baseAmountCents\": 9900,\n"
+                    + "      \"perSeatAmountCents\": 1500,\n"
+                    + "      \"currency\": \"TRY\"\n"
+                    + "    }\n"
+                    + "  ]\n"
+                    + "}";
 
-    public BillingController(SubscriptionFacade subscriptionFacade) {
+    private final SubscriptionFacade subscriptionFacade;
+    private final BillingCatalogFacade billingCatalogFacade;
+
+    public BillingController(SubscriptionFacade subscriptionFacade, BillingCatalogFacade billingCatalogFacade) {
         this.subscriptionFacade = subscriptionFacade;
+        this.billingCatalogFacade = billingCatalogFacade;
+    }
+
+    @Operation(
+            summary = "List available subscription plans",
+            description = "Returns the publicly available plans together with their pricing options.",
+            responses = {
+                @ApiResponse(
+                        responseCode = "200",
+                        description = "Plans retrieved successfully",
+                        content =
+                                @Content(
+                                        mediaType = "application/json",
+                                        schema = @Schema(implementation = PlanResponse.class),
+                                        examples =
+                                                @ExampleObject(
+                                                        name = "plan",
+                                                        value = PLAN_RESPONSE_EXAMPLE)))
+            })
+    @GetMapping("/public/plans")
+    public List<PlanResponse> listPublicPlans() {
+        return billingCatalogFacade.getPublicPlans().stream()
+                .map(this::toPlanResponse)
+                .collect(Collectors.toList());
     }
 
     @Operation(
@@ -315,6 +361,31 @@ public class BillingController {
     }
 
     @Operation(
+            summary = "Get invoice details",
+            description = "Retrieves detailed information about a single invoice.",
+            responses = {
+                @ApiResponse(
+                        responseCode = "200",
+                        description = "Invoice found",
+                        content =
+                                @Content(
+                                        mediaType = "application/json",
+                                        schema = @Schema(implementation = InvoiceDetailResponse.class))),
+                @ApiResponse(
+                        responseCode = "404",
+                        description = "Invoice not found",
+                        content =
+                                @Content(
+                                        mediaType = "application/json",
+                                        schema = @Schema(implementation = ProblemDetail.class)))
+            })
+    @GetMapping("/invoices/{id}")
+    public InvoiceDetailResponse getInvoice(@PathVariable UUID id) {
+        InvoiceDetailDto dto = billingCatalogFacade.getInvoice(id);
+        return toInvoiceDetailResponse(dto);
+    }
+
+    @Operation(
             summary = "List customer subscriptions",
             description = "Returns all subscriptions that belong to the provided customer identifier.",
             responses = {
@@ -364,6 +435,34 @@ public class BillingController {
         return subscriptionFacade.getInvoicesByCustomer(id).stream()
                 .map(this::toInvoiceResponse)
                 .collect(Collectors.toList());
+    }
+
+    private PlanResponse toPlanResponse(PlanCatalogDto dto) {
+        List<PlanPriceResponse> prices = dto.prices() != null
+                ? dto.prices().stream().map(this::toPlanPriceResponse).collect(Collectors.toList())
+                : List.of();
+        return new PlanResponse(dto.id(), dto.code(), dto.name(), dto.description(), prices);
+    }
+
+    private PlanPriceResponse toPlanPriceResponse(PlanPriceDto dto) {
+        return new PlanPriceResponse(
+                dto.id(), dto.billingPeriod(), dto.baseAmountCents(), dto.perSeatAmountCents(), dto.currency());
+    }
+
+    private InvoiceDetailResponse toInvoiceDetailResponse(InvoiceDetailDto dto) {
+        return new InvoiceDetailResponse(
+                dto.id(),
+                dto.subscriptionId(),
+                dto.externalInvoiceId(),
+                dto.periodStart(),
+                dto.periodEnd(),
+                dto.subtotalCents(),
+                dto.taxCents(),
+                dto.totalCents(),
+                dto.currency(),
+                dto.status(),
+                dto.createdAt(),
+                dto.updatedAt());
     }
 
     private SubscriptionResponse toResponse(SubscriptionDto dto) {

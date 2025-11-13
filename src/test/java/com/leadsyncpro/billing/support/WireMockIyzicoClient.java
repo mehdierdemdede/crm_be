@@ -38,6 +38,21 @@ public class WireMockIyzicoClient implements IyzicoClient {
     }
 
     @Override
+    public String tokenizePaymentMethod(
+            String cardHolderName, String cardNumber, String expireMonth, String expireYear, String cvc) {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("cardHolderName", cardHolderName);
+        payload.put("cardNumber", cardNumber);
+        payload.put("expireMonth", expireMonth);
+        payload.put("expireYear", expireYear);
+        payload.put("cvc", cvc);
+        ResponseEntity<TokenResponse> response =
+                restTemplate.postForEntity(baseUrl + "/v1/payment-method-tokens", payload, TokenResponse.class);
+        TokenResponse body = Objects.requireNonNull(response.getBody(), "WireMock response body is null");
+        return body.token();
+    }
+
+    @Override
     public IyzicoSubscriptionResponse createSubscription(
             Customer customer, Price price, int seatCount, PaymentMethod paymentMethod) {
         Map<String, Object> payload = new HashMap<>();
@@ -103,6 +118,8 @@ public class WireMockIyzicoClient implements IyzicoClient {
     }
 
     private record PaymentMethodResponse(String token) {}
+
+    private record TokenResponse(String token) {}
 
     private record SubscriptionResponse(
             String subscriptionId, Instant currentPeriodStart, Instant currentPeriodEnd, boolean cancelAtPeriodEnd) {}
