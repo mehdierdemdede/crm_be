@@ -20,6 +20,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.http.HttpStatus;
@@ -87,13 +88,19 @@ public class BillingController {
                     + "  \"code\": \"BASIC\",\n"
                     + "  \"name\": \"Basic Plan\",\n"
                     + "  \"description\": \"Entry level plan for growing teams\",\n"
+                    + "  \"features\": [\"Pipeline otomasyonları\"],\n"
+                    + "  \"metadata\": {\n"
+                    + "    \"basePrice_month\": 99,\n"
+                    + "    \"perSeatPrice_month\": 15\n"
+                    + "  },\n"
                     + "  \"prices\": [\n"
                     + "    {\n"
                     + "      \"id\": \"8c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e50\",\n"
+                    + "      \"amount\": 15,\n"
+                    + "      \"currency\": \"TRY\",\n"
                     + "      \"billingPeriod\": \"MONTH\",\n"
-                    + "      \"baseAmountCents\": 9900,\n"
-                    + "      \"perSeatAmountCents\": 1500,\n"
-                    + "      \"currency\": \"TRY\"\n"
+                    + "      \"seatLimit\": null,\n"
+                    + "      \"trialDays\": 14\n"
                     + "    }\n"
                     + "  ]\n"
                     + "}";
@@ -441,12 +448,14 @@ public class BillingController {
         List<PlanPriceResponse> prices = dto.prices() != null
                 ? dto.prices().stream().map(this::toPlanPriceResponse).collect(Collectors.toList())
                 : List.of();
-        return new PlanResponse(dto.id(), dto.code(), dto.name(), dto.description(), prices);
+        List<String> features = dto.features() != null ? dto.features() : List.of();
+        Map<String, Object> metadata = dto.metadata() != null ? dto.metadata() : Map.of();
+        return new PlanResponse(dto.id(), dto.code(), dto.name(), dto.description(), features, metadata, prices);
     }
 
     private PlanPriceResponse toPlanPriceResponse(PlanPriceDto dto) {
         return new PlanPriceResponse(
-                dto.id(), dto.billingPeriod(), dto.baseAmountCents(), dto.perSeatAmountCents(), dto.currency());
+                dto.id(), dto.amount(), dto.currency(), dto.billingPeriod(), dto.seatLimit(), dto.trialDays());
     }
 
     private InvoiceDetailResponse toInvoiceDetailResponse(InvoiceDetailDto dto) {

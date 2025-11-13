@@ -78,7 +78,11 @@ class BillingE2ETest {
                 .orElseThrow(() -> new AssertionError("BASIC plan not found"));
 
         assertThat(basicPlan.get("prices").isArray()).isTrue();
-        assertThat(basicPlan.get("prices").get(0).get("currency").asText()).isEqualTo("TRY");
+        assertThat(basicPlan.get("features").isArray()).isTrue();
+        assertThat(basicPlan.get("metadata").get("perSeatPrice_month").decimalValue()).isEqualByComparingTo("15");
+        JsonNode firstPrice = basicPlan.get("prices").get(0);
+        assertThat(firstPrice.get("currency").asText()).isEqualTo("TRY");
+        assertThat(firstPrice.get("amount").decimalValue()).isEqualByComparingTo("15");
     }
 
     @Test

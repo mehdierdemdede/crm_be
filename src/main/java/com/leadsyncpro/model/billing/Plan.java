@@ -1,6 +1,9 @@
 package com.leadsyncpro.model.billing;
 
+import com.leadsyncpro.model.converter.JsonMapConverter;
+import com.leadsyncpro.model.converter.StringListConverter;
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
@@ -11,7 +14,9 @@ import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -43,6 +48,16 @@ public class Plan {
 
     @Column(columnDefinition = "TEXT")
     private String description;
+
+    @Builder.Default
+    @Convert(converter = StringListConverter.class)
+    @Column(columnDefinition = "jsonb", nullable = false)
+    private List<String> features = new ArrayList<>();
+
+    @Builder.Default
+    @Convert(converter = JsonMapConverter.class)
+    @Column(columnDefinition = "jsonb", nullable = false)
+    private Map<String, Object> metadata = new HashMap<>();
 
     @Builder.Default
     @OneToMany(mappedBy = "plan", fetch = FetchType.LAZY)
