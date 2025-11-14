@@ -2,12 +2,8 @@ package com.leadsyncpro.controller;
 
 import com.leadsyncpro.dto.*;
 import com.leadsyncpro.model.Lead;
-import com.leadsyncpro.model.LeadActivityLog;
-import com.leadsyncpro.model.LeadStatus;
-import com.leadsyncpro.model.LeadStatusLog;
 import com.leadsyncpro.security.UserPrincipal;
 import com.leadsyncpro.service.LeadActionService;
-import com.leadsyncpro.service.LeadActivityLogService;
 import com.leadsyncpro.service.LeadService;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
@@ -16,6 +12,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -28,15 +25,11 @@ public class LeadController {
 
     private final LeadService leadService;
     private final LeadActionService leadActionService;
-    private final LeadActivityLogService leadActivityLogService;
-
     public LeadController(
             LeadService leadService,
-            LeadActionService leadActionService,
-            LeadActivityLogService leadActivityLogService) {
+            LeadActionService leadActionService) {
         this.leadService = leadService;
         this.leadActionService = leadActionService;
-        this.leadActivityLogService = leadActivityLogService;
     }
 
     // --------------------------------------------------------------
@@ -125,19 +118,6 @@ public class LeadController {
         return ResponseEntity.ok(updated);
     }
 
-    @GetMapping("/{leadId}/status-logs")
-    @PreAuthorize("hasAnyAuthority('USER', 'ADMIN', 'SUPER_ADMIN')")
-    public ResponseEntity<List<LeadStatusLog>> getLeadStatusLogs(@PathVariable UUID leadId,
-                                                                 @AuthenticationPrincipal UserPrincipal currentUser) {
-        List<LeadStatusLog> logs = leadService.getLeadStatusLogs(leadId, currentUser.getOrganizationId());
-        if (logs.isEmpty()) return ResponseEntity.noContent().build();
-        return ResponseEntity.ok(logs);
-    }
-
-    // --------------------------------------------------------------
-    // 🔹 Lead Action Logs (kullanıcı eylemleri)
-    // --------------------------------------------------------------
-
     @PostMapping("/{leadId}/actions")
     @PreAuthorize("hasAnyAuthority('USER','ADMIN','SUPER_ADMIN')")
     public ResponseEntity<LeadActionResponse> addLeadAction(@PathVariable UUID leadId,
@@ -158,33 +138,18 @@ public class LeadController {
         return ResponseEntity.ok(actions);
     }
 
-    // --------------------------------------------------------------
-    // 🔹 Lead Activity Logs (sistem logları)
-    // --------------------------------------------------------------
-
-    @PostMapping("/{leadId}/activity-logs")
-    @PreAuthorize("hasAnyAuthority('USER','ADMIN','SUPER_ADMIN')")
-    public ResponseEntity<LeadActivityLog> addActivityLog(@PathVariable UUID leadId,
-                                                          @RequestBody LeadLogRequest req,
-                                                          @AuthenticationPrincipal UserPrincipal currentUser) {
-        LeadActivityLog log = leadActivityLogService.addLog(leadId, currentUser.getOrganizationId(), currentUser.getId(), req);
-        return ResponseEntity.ok(log);
-    }
-
-    @GetMapping("/{leadId}/activity-logs")
-    @PreAuthorize("hasAnyAuthority('USER','ADMIN','SUPER_ADMIN')")
-    public ResponseEntity<List<LeadActivityLog>> getActivityLogs(@PathVariable UUID leadId,
-                                                                 @AuthenticationPrincipal UserPrincipal currentUser) {
-        return ResponseEntity.ok(leadActivityLogService.getLogs(leadId, currentUser.getOrganizationId()));
-    }
-
     @PatchMapping("/{id}/assign")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'SUPER_ADMIN')")
     public ResponseEntity<Lead> assignLead(
             @PathVariable UUID id,
-            @RequestParam UUID userId,
+            @RequestParam(value = "userId", required = false) String userIdParam,
             @AuthenticationPrincipal UserPrincipal currentUser
     ) {
+        UUID userId = null;
+        if (StringUtils.hasText(userIdParam)) {
+            userId = UUID.fromString(userIdParam);
+        }
+
         Lead updated = leadService.assignLead(id, userId, currentUser.getOrganizationId());
         return ResponseEntity.ok(updated);
     }

@@ -14,7 +14,6 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -29,16 +28,12 @@ public class AuthController {
     private final AuthenticationManager authenticationManager;
     private final JwtTokenProvider tokenProvider;
     private final UserService userService;
-    private final PasswordEncoder passwordEncoder;
-
     public AuthController(AuthenticationManager authenticationManager,
                           JwtTokenProvider tokenProvider,
-                          UserService userService,
-                          PasswordEncoder passwordEncoder) {
+                          UserService userService) {
         this.authenticationManager = authenticationManager;
         this.tokenProvider = tokenProvider;
         this.userService = userService;
-        this.passwordEncoder = passwordEncoder;
     }
 
     @PostMapping("/login")
@@ -68,10 +63,4 @@ public class AuthController {
         return ResponseEntity.ok(new JwtAuthenticationResponse(jwt, "Bearer"));
     }
 
-    @PostMapping("/hash-password")
-    public ResponseEntity<String> hashPassword(@RequestBody String plainPassword) {
-        String hashedPassword = passwordEncoder.encode(plainPassword);
-        logger.info("Hashed password generated for request.");
-        return ResponseEntity.ok(hashedPassword);
-    }
 }
