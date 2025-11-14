@@ -27,4 +27,6 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     /** Organizasyondaki tüm SUPER_ADMIN kullanıcılarını döndürür (load balance için kullanılabilir) */
     List<User> findAllByOrganizationIdAndRole(UUID organizationId, Role role);
+
+    long countByOrganizationId(UUID organizationId);
 }

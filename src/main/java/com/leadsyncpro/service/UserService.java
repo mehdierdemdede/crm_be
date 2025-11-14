@@ -22,12 +22,18 @@ public class UserService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final InviteService inviteService;
+    private final OrganizationService organizationService;
 
 
-    public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder, InviteService inviteService) {
+    public UserService(
+            UserRepository userRepository,
+            PasswordEncoder passwordEncoder,
+            InviteService inviteService,
+            OrganizationService organizationService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.inviteService = inviteService;
+        this.organizationService = organizationService;
     }
 
     @Transactional
@@ -45,6 +51,7 @@ public class UserService {
         if (userRepository.existsByOrganizationIdAndEmail(organizationId, normalizedEmail)) {
             throw new IllegalArgumentException("User with this email already exists in this organization.");
         }
+        ensureCapacityForNewUser(organizationId);
         User user = new User();
         user.setOrganizationId(organizationId);
         user.setEmail(normalizedEmail);
@@ -151,6 +158,7 @@ public class UserService {
         if (userRepository.existsByOrganizationIdAndEmail(orgId, normalizedEmail)) {
             throw new IllegalArgumentException("User with this email already exists in this organization.");
         }
+        ensureCapacityForNewUser(orgId);
 
         User user = new User();
         user.setOrganizationId(orgId);
@@ -173,7 +181,7 @@ public class UserService {
     }
 
     public String getMyHashedPass(PasswordEncoder passwordEncoder) {
-       return passwordEncoder.encode("password");
+        return passwordEncoder.encode("password");
     }
 
     private Set<SupportedLanguages> normalizeSupportedLanguages(Set<SupportedLanguages> languages) {
@@ -181,6 +189,14 @@ public class UserService {
             return EnumSet.noneOf(SupportedLanguages.class);
         }
         return EnumSet.copyOf(languages);
+    }
+
+    private void ensureCapacityForNewUser(UUID organizationId) {
+        if (organizationId == null) {
+            throw new IllegalArgumentException("organizationId is required to create a user.");
+        }
+        long existingUsers = userRepository.countByOrganizationId(organizationId);
+        organizationService.ensureWithinUserLimit(organizationId, existingUsers + 1);
     }
 
 }
