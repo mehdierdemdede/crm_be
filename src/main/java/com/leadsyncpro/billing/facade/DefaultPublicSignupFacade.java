@@ -88,7 +88,7 @@ public class DefaultPublicSignupFacade implements PublicSignupFacade {
         signup.setAdminEmail(admin.getEmail());
         signup.setAdminPhone(command.adminPhone());
         signup.setStatus(PublicSignupStatus.INVITE_SENT);
-        signup.setStatusMessage("Invitation email sent to organization admin");
+        signup.setStatusMessage(resolveStatusMessage(price));
         signup.setOrganization(organization);
         signup.setAdminUser(admin);
         signup.setInviteToken(inviteToken.getToken());
@@ -178,5 +178,14 @@ public class DefaultPublicSignupFacade implements PublicSignupFacade {
             throw new PublicSignupException(
                     HttpStatus.BAD_GATEWAY, "Failed to send invitation email. Please try again later.");
         }
+    }
+
+    private String resolveStatusMessage(Price price) {
+        Integer trialDays = price.getTrialDays();
+        if (trialDays != null && trialDays > 0) {
+            return "Invitation email sent. Trial period of %d days activated; payment will be collected after the trial ends."
+                    .formatted(trialDays);
+        }
+        return "Invitation email sent after successful iyzico payment.";
     }
 }
