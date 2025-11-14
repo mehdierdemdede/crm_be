@@ -8,6 +8,9 @@ import com.leadsyncpro.billing.facade.InvoiceDetailDto;
 import com.leadsyncpro.billing.facade.InvoiceDto;
 import com.leadsyncpro.billing.facade.PlanCatalogDto;
 import com.leadsyncpro.billing.facade.PlanPriceDto;
+import com.leadsyncpro.billing.facade.PublicSignupFacade;
+import com.leadsyncpro.billing.facade.CreatePublicSignupCmd;
+import com.leadsyncpro.billing.facade.PublicSignupResult;
 import com.leadsyncpro.billing.facade.Proration;
 import com.leadsyncpro.billing.facade.SubscriptionDto;
 import com.leadsyncpro.billing.facade.SubscriptionFacade;
@@ -24,6 +27,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ProblemDetail;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -107,10 +111,15 @@ public class BillingController {
 
     private final SubscriptionFacade subscriptionFacade;
     private final BillingCatalogFacade billingCatalogFacade;
+    private final PublicSignupFacade publicSignupFacade;
 
-    public BillingController(SubscriptionFacade subscriptionFacade, BillingCatalogFacade billingCatalogFacade) {
+    public BillingController(
+            SubscriptionFacade subscriptionFacade,
+            BillingCatalogFacade billingCatalogFacade,
+            PublicSignupFacade publicSignupFacade) {
         this.subscriptionFacade = subscriptionFacade;
         this.billingCatalogFacade = billingCatalogFacade;
+        this.publicSignupFacade = publicSignupFacade;
     }
 
     @Operation(
@@ -134,6 +143,65 @@ public class BillingController {
         return billingCatalogFacade.getPublicPlans().stream()
                 .map(this::toPlanResponse)
                 .collect(Collectors.toList());
+    }
+
+    @Operation(
+            summary = "Submit a public signup",
+            description =
+                    "Creates a new organization signup by selecting a plan, billing period and providing admin contact details.",
+            requestBody =
+                    @RequestBody(
+                            required = true,
+                            content =
+                                    @Content(
+                                            mediaType = "application/json",
+                                            schema = @Schema(implementation = PublicSignupRequest.class))),
+            responses = {
+                @ApiResponse(
+                        responseCode = "201",
+                        description = "Signup accepted",
+                        content =
+                                @Content(
+                                        mediaType = "application/json",
+                                        schema = @Schema(implementation = PublicSignupResponse.class))),
+                @ApiResponse(
+                        responseCode = "400",
+                        description = "Validation error",
+                        content =
+                                @Content(
+                                        mediaType = "application/json",
+                                        schema = @Schema(implementation = ProblemDetail.class))),
+                @ApiResponse(
+                        responseCode = "404",
+                        description = "Plan not found",
+                        content =
+                                @Content(
+                                        mediaType = "application/json",
+                                        schema = @Schema(implementation = ProblemDetail.class)))
+            })
+    @PostMapping(
+            value = "/public/signups",
+            consumes = MediaType.APPLICATION_JSON_VALUE,
+            produces = MediaType.APPLICATION_JSON_VALUE)
+    @ResponseStatus(HttpStatus.CREATED)
+    public PublicSignupResponse createPublicSignup(
+            @Valid @org.springframework.web.bind.annotation.RequestBody PublicSignupRequest request) {
+        PublicSignupResult result = publicSignupFacade.createSignup(new CreatePublicSignupCmd(
+                request.planId(),
+                request.billingPeriod(),
+                request.seatCount(),
+                request.organizationName(),
+                request.admin().firstName(),
+                request.admin().lastName(),
+                request.admin().email(),
+                request.admin().phone()));
+        return new PublicSignupResponse(
+                result.signupId(),
+                result.organizationId(),
+                result.adminEmail(),
+                result.inviteToken(),
+                result.status() != null ? result.status().name() : null,
+                result.message());
     }
 
     @Operation(

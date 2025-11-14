@@ -7,6 +7,7 @@ import com.leadsyncpro.billing.facade.SubscriptionNotFoundException;
 import com.leadsyncpro.billing.facade.SubscriptionOperationException;
 import com.leadsyncpro.billing.service.PlanConflictException;
 import com.leadsyncpro.billing.service.PlanValidationException;
+import com.leadsyncpro.billing.service.PublicSignupException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
@@ -63,5 +64,12 @@ public class BillingApiExceptionHandler {
         ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
         detail.setTitle("Plan validation failed");
         return ResponseEntity.badRequest().body(detail);
+    }
+
+    @ExceptionHandler(PublicSignupException.class)
+    public ResponseEntity<ProblemDetail> handlePublicSignup(PublicSignupException ex) {
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(ex.getStatus(), ex.getMessage());
+        detail.setTitle("Public signup failed");
+        return ResponseEntity.status(ex.getStatus()).body(detail);
     }
 }
