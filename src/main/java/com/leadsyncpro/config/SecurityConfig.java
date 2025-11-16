@@ -89,6 +89,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/users/invite/accept").permitAll() // <-- burayı ekledik
                         .requestMatchers("/api/integrations/oauth2/**").permitAll()
+                        .requestMatchers("/payments/**", "/api/payments/**").permitAll()
                         .requestMatchers("/billing/public/**", "/api/billing/public/**").permitAll()
                         .requestMatchers("/error").permitAll()
                         .requestMatchers("/favicon.ico").permitAll()
