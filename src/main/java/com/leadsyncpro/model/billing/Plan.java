@@ -54,6 +54,10 @@ public class Plan {
     private List<String> features = new ArrayList<>();
 
     @Builder.Default
+    @Column(name = "is_active", nullable = false)
+    private boolean active = true;
+
+    @Builder.Default
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb", nullable = false)
     private Map<String, Object> metadata = new HashMap<>();
