@@ -34,6 +34,15 @@ tasks.named('bootRun') {
         mainClass.set(applicationMainClass)
 }
 
+// Bazı IDE'ler (özellikle IntelliJ IDEA'daki düz Java Application konfigürasyonları),
+// Gradle `application` eklentisiyle tanımlanan mainClass bilgisini her zaman
+// otomatik olarak almayabiliyor. `JavaExec` tabanlı görevlerde mainClass'ı
+// sabitleyerek derlenmiş sınıf dosyaları bulunduğunda "Could not find or load
+// main class com.leadsyncpro.crm.CrmApplication" hatasının önüne geçiyoruz.
+tasks.withType(JavaExec).configureEach {
+        mainClass.set(applicationMainClass)
+}
+
 // Ensure IntelliJ's plain Java runner and any locally built plain JARs
 // can locate the Spring Boot entrypoint without relying on Gradle metadata.
 tasks.named('jar') {
