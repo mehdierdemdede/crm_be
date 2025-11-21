@@ -18,25 +18,30 @@ java {
         }
 }
 
+def applicationMainClass = 'com.leadsyncpro.crm.CrmApplication'
+
 springBoot {
-        mainClass = 'com.leadsyncpro.crm.CrmApplication'
+        mainClass.set(applicationMainClass)
 }
 
 application {
         // IntelliJ veya `./gradlew run` gibi araçlarla uygulamayı
         // çalıştırırken ana sınıfın doğru şekilde bulunmasını sağlar.
-        mainClass = 'com.leadsyncpro.crm.CrmApplication'
+        mainClass.set(applicationMainClass)
 }
 
 tasks.named('bootRun') {
-        mainClass.set('com.leadsyncpro.crm.CrmApplication')
+        mainClass.set(applicationMainClass)
 }
 
 // Ensure IntelliJ's plain Java runner and any locally built plain JARs
 // can locate the Spring Boot entrypoint without relying on Gradle metadata.
 tasks.named('jar') {
         manifest {
-                attributes('Main-Class': 'com.leadsyncpro.crm.CrmApplication')
+                attributes(
+                        'Main-Class': applicationMainClass,
+                        'Start-Class': applicationMainClass
+                )
         }
 }
 
