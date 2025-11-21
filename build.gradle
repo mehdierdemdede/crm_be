@@ -4,6 +4,7 @@
 
 plugins {
         id 'java'
+        id 'application'
         id 'org.springframework.boot' version '3.5.3' // Spring Boot versiyonu
         id 'io.spring.dependency-management' version '1.1.7' // Bağımlılık yönetimi
 }
@@ -18,6 +19,12 @@ java {
 }
 
 springBoot {
+        mainClass = 'com.leadsyncpro.crm.CrmApplication'
+}
+
+application {
+        // IntelliJ veya `./gradlew run` gibi araçlarla uygulamayı
+        // çalıştırırken ana sınıfın doğru şekilde bulunmasını sağlar.
         mainClass = 'com.leadsyncpro.crm.CrmApplication'
 }
 
