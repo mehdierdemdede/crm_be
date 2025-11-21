@@ -2,7 +2,6 @@ package com.leadsyncpro.billing.api;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.ok;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
-import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.resetAllRequests;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
@@ -15,6 +14,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.tomakehurst.wiremock.WireMockServer;
+import com.github.tomakehurst.wiremock.client.WireMock;
 import com.leadsyncpro.billing.support.WireMockIyzicoTestConfig;
 import java.time.Instant;
 import java.util.HashMap;
@@ -99,7 +99,7 @@ class BillingE2ETest {
     @Test
     @WithMockUser(roles = "ADMIN")
     void tokenizePaymentMethod_returnsGatewayToken() throws Exception {
-        wireMockServer.stubFor(post(urlEqualTo("/v1/payment-method-tokens"))
+        wireMockServer.stubFor(WireMock.post(urlEqualTo("/v1/payment-method-tokens"))
                 .willReturn(okJson("{\"token\":\"tok_wiremock_456\"}")));
 
         Map<String, Object> request = Map.of(
@@ -187,7 +187,7 @@ class BillingE2ETest {
     }
 
     private void stubIyziPaymentFlow() {
-        wireMockServer.stubFor(post(urlEqualTo("/v1/payment-methods"))
+        wireMockServer.stubFor(WireMock.post(urlEqualTo("/v1/payment-methods"))
                 .willReturn(okJson("{\"token\":\"pm_wiremock_token\"}")));
 
         String subscriptionResponse = String.format(
@@ -196,16 +196,16 @@ class BillingE2ETest {
                 Instant.parse("2024-02-01T00:00:00Z"),
                 Instant.parse("2024-02-29T23:59:59Z"));
 
-        wireMockServer.stubFor(post(urlEqualTo("/v1/subscriptions"))
+        wireMockServer.stubFor(WireMock.post(urlEqualTo("/v1/subscriptions"))
                 .willReturn(okJson(subscriptionResponse)));
 
-        wireMockServer.stubFor(post(urlEqualTo("/v1/subscriptions/" + EXTERNAL_SUBSCRIPTION_ID + "/plan"))
+        wireMockServer.stubFor(WireMock.post(urlEqualTo("/v1/subscriptions/" + EXTERNAL_SUBSCRIPTION_ID + "/plan"))
                 .willReturn(ok()));
 
-        wireMockServer.stubFor(post(urlEqualTo("/v1/subscriptions/" + EXTERNAL_SUBSCRIPTION_ID + "/seats"))
+        wireMockServer.stubFor(WireMock.post(urlEqualTo("/v1/subscriptions/" + EXTERNAL_SUBSCRIPTION_ID + "/seats"))
                 .willReturn(ok()));
 
-        wireMockServer.stubFor(post(urlEqualTo("/v1/subscriptions/" + EXTERNAL_SUBSCRIPTION_ID + "/cancel"))
+        wireMockServer.stubFor(WireMock.post(urlEqualTo("/v1/subscriptions/" + EXTERNAL_SUBSCRIPTION_ID + "/cancel"))
                 .willReturn(ok()));
     }
 }
