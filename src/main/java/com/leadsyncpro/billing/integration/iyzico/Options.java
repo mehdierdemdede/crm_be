@@ -1,4 +1,4 @@
-package com.iyzipay;
+package com.leadsyncpro.billing.integration.iyzico;
 
 public class Options {
 
