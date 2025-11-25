@@ -50,7 +50,7 @@ public class Plan {
 
     @Builder.Default
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(columnDefinition = "jsonb", nullable = false)
+    @Column(nullable = false)
     private List<String> features = new ArrayList<>();
 
     @Builder.Default
@@ -59,7 +59,7 @@ public class Plan {
 
     @Builder.Default
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(columnDefinition = "jsonb", nullable = false)
+    @Column(nullable = false)
     private Map<String, Object> metadata = new HashMap<>();
 
     @Builder.Default

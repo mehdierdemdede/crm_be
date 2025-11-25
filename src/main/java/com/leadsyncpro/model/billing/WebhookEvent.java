@@ -17,6 +17,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.GenericGenerator;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Getter
 @Setter
@@ -39,7 +41,8 @@ public class WebhookEvent {
     @Column(name = "event_type", nullable = false, length = 255)
     private String eventType;
 
-    @Column(columnDefinition = "jsonb", nullable = false)
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(nullable = false)
     private String payload;
 
     @Column(length = 512)
