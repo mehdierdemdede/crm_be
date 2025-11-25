@@ -2,7 +2,6 @@ package com.leadsyncpro.billing.integration.iyzico;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.iyzipay.Options;
 import com.leadsyncpro.billing.config.IyzicoProperties;
 import com.leadsyncpro.model.billing.Customer;
 import com.leadsyncpro.model.billing.PaymentMethod;
