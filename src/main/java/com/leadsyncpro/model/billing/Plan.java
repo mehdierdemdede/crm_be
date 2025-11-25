@@ -30,7 +30,7 @@ import org.hibernate.type.SqlTypes;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(name = "plan")
+@Table(name = "plans")
 public class Plan {
 
     @Id
