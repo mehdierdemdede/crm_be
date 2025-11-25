@@ -80,7 +80,6 @@ dependencies {
         implementation 'io.micrometer:micrometer-tracing-bridge-otel'
         implementation 'io.opentelemetry:opentelemetry-sdk:1.45.0'
         implementation 'io.opentelemetry:opentelemetry-exporter-logging:1.45.0'
-        implementation 'org.flywaydb:flyway-core'
         // Veritabanı Sürücüleri
         runtimeOnly 'org.postgresql:postgresql' // PostgreSQL JDBC sürücüsü
         runtimeOnly 'com.h2database:h2' // Profil belirtilmediğinde kullanılacak hafif H2 sürücüsü
