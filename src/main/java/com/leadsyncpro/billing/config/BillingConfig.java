@@ -22,6 +22,7 @@ import java.time.Duration;
 import java.time.ZoneId;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.tracing.Tracer;
+import org.springframework.boot.http.client.ClientHttpRequestFactorySettings;
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -45,9 +46,12 @@ public class BillingConfig {
 
     @Bean
     public RestTemplate iyzicoRestTemplate(RestTemplateBuilder restTemplateBuilder) {
+        ClientHttpRequestFactorySettings requestFactorySettings = ClientHttpRequestFactorySettings.defaults()
+                .withConnectTimeout(CONNECT_TIMEOUT)
+                .withReadTimeout(READ_TIMEOUT);
+
         return restTemplateBuilder
-                .setConnectTimeout(CONNECT_TIMEOUT)
-                .setReadTimeout(READ_TIMEOUT)
+                .requestFactorySettings(requestFactorySettings)
                 .build();
     }
 
