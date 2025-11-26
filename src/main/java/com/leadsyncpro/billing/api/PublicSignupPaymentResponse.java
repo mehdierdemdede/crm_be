@@ -1,22 +1,24 @@
 package com.leadsyncpro.billing.api;
 
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.annotation.Nullable;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonInclude.Include;
 
 @Schema(name = "PublicSignupPaymentResponse")
+@JsonInclude(Include.NON_NULL)
 public record PublicSignupPaymentResponse(
         @Schema(description = "Result status of the payment initialization", example = "SUCCESS")
                 String status,
         @Schema(description = "Identifier for the created subscription or token", example = "tok_1Nv0a8YgL9s")
-                @Nullable String subscriptionId,
+                String subscriptionId,
         @Schema(description = "Identifier assigned by Iyzico for the subscription", example = "sub_123456")
-                @Nullable String iyzicoSubscriptionId,
+                String iyzicoSubscriptionId,
         @Schema(description = "Identifier assigned by Iyzico for the customer", example = "cus_123456")
-                @Nullable String iyzicoCustomerId,
+                String iyzicoCustomerId,
         @Schema(description = "Optional human readable message", example = "Payment method token generated successfully")
-                @Nullable String message,
+                String message,
         @Schema(description = "Whether the created subscription includes a trial", example = "false")
-                @Nullable Boolean hasTrial) {
+                Boolean hasTrial) {
 
     public enum Status {
         SUCCESS,
