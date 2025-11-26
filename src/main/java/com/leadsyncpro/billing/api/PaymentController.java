@@ -29,11 +29,29 @@ public class PaymentController {
 
     private static final String INITIALIZE_REQUEST_EXAMPLE =
             "{\n"
-                    + "  \"cardHolderName\": \"Ada Lovelace\",\n"
-                    + "  \"cardNumber\": \"5528790000000008\",\n"
-                    + "  \"expireMonth\": \"01\",\n"
-                    + "  \"expireYear\": \"2026\",\n"
-                    + "  \"cvc\": \"123\"\n"
+                    + "  \"planId\": \"5d3c7f8b-8a8c-4f2e-9f8f-9b0c1d2e3f01\",\n"
+                    + "  \"billingPeriod\": \"MONTH\",\n"
+                    + "  \"seatCount\": 10,\n"
+                    + "  \"account\": {\n"
+                    + "    \"firstName\": \"Ada\",\n"
+                    + "    \"lastName\": \"Lovelace\",\n"
+                    + "    \"email\": \"ada@acme.co\",\n"
+                    + "    \"password\": \"P@ssw0rd!\",\n"
+                    + "    \"phone\": \"+90 555 000 0000\"\n"
+                    + "  },\n"
+                    + "  \"organization\": {\n"
+                    + "    \"organizationName\": \"Acme Inc.\",\n"
+                    + "    \"country\": \"TR\",\n"
+                    + "    \"taxNumber\": \"1234567890\",\n"
+                    + "    \"companySize\": \"51-100\"\n"
+                    + "  },\n"
+                    + "  \"card\": {\n"
+                    + "    \"cardHolderName\": \"Ada Lovelace\",\n"
+                    + "    \"cardNumber\": \"5528790000000008\",\n"
+                    + "    \"expireMonth\": 1,\n"
+                    + "    \"expireYear\": 2026,\n"
+                    + "    \"cvc\": \"123\"\n"
+                    + "  }\n"
                     + "}";
 
     private final IyzicoClient iyzicoClient;
@@ -53,7 +71,10 @@ public class PaymentController {
                             content =
                                     @Content(
                                             mediaType = "application/json",
-                                            schema = @Schema(implementation = TokenizePaymentMethodRequest.class),
+                                            schema =
+                                                    @Schema(
+                                                            implementation =
+                                                                    PublicSignupPaymentInitializeRequest.class),
                                             examples =
                                                     @ExampleObject(
                                                             name = "initializePayment",
@@ -72,13 +93,19 @@ public class PaymentController {
     @PostMapping("/initialize")
     @ResponseStatus(HttpStatus.OK)
     public TokenizePaymentMethodResponse initialize(
-            @Valid @org.springframework.web.bind.annotation.RequestBody TokenizePaymentMethodRequest request) {
+            @Valid
+                    @org.springframework.web.bind.annotation.RequestBody
+                    PublicSignupPaymentInitializeRequest request) {
+        PublicSignupPaymentInitializeRequest.Card card = request.resolvedCard();
+        if (card == null) {
+            throw new IllegalArgumentException("Card details are required");
+        }
         String token = iyzicoClient.tokenizePaymentMethod(
-                request.cardHolderName(),
-                request.cardNumber(),
-                request.expireMonth(),
-                request.expireYear(),
-                request.cvc());
+                card.cardHolderName(),
+                card.cardNumber(),
+                card.formattedExpireMonth(),
+                card.formattedExpireYear(),
+                card.cvc());
         return new TokenizePaymentMethodResponse(token);
     }
 }
