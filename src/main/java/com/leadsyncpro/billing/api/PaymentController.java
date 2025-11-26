@@ -86,13 +86,13 @@ public class PaymentController {
                         content =
                                 @Content(
                                         mediaType = "application/json",
-                                        schema = @Schema(implementation = TokenizePaymentMethodResponse.class))),
+                                        schema = @Schema(implementation = PublicSignupPaymentResponse.class))),
                 @ApiResponse(responseCode = "400", description = "Invalid card information"),
                 @ApiResponse(responseCode = "502", description = "Iyzico gateway error")
             })
     @PostMapping("/initialize")
     @ResponseStatus(HttpStatus.OK)
-    public TokenizePaymentMethodResponse initialize(
+    public PublicSignupPaymentResponse initialize(
             @Valid
                     @org.springframework.web.bind.annotation.RequestBody
                     PublicSignupPaymentInitializeRequest request) {
@@ -106,6 +106,12 @@ public class PaymentController {
                 card.formattedExpireMonth(),
                 card.formattedExpireYear(),
                 card.cvc());
-        return new TokenizePaymentMethodResponse(token);
+        return new PublicSignupPaymentResponse(
+                PublicSignupPaymentResponse.Status.SUCCESS.name(),
+                token,
+                null,
+                null,
+                "Payment method token generated successfully",
+                Boolean.FALSE);
     }
 }
