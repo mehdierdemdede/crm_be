@@ -49,7 +49,11 @@ public record PublicSignupPaymentInitializeRequest(
     public record Organization(
             @NotBlank @Size(max = 255) @Schema(description = "Name of the organization to be created", example = "Acme Inc.")
                     String organizationName,
-            @NotBlank @Size(max = 3) @Schema(description = "ISO country code for the organization", example = "TR")
+            @NotBlank
+                    @Size(min = 2, max = 3)
+                    @Schema(
+                            description = "ISO alpha-2 or alpha-3 country code for the organization",
+                            example = "TR")
                     String country,
             @NotBlank
                     @Size(max = 50)
