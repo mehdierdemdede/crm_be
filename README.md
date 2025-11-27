@@ -46,6 +46,8 @@ For more frontend-specific integration details see [`docs/frontend/facebook-lead
 
 Looking for the full backend enhancement scope? See [`docs/backend/enhancement-requirements.md`](docs/backend/enhancement-requirements.md) for the consolidated requirements covering lead automation, secure communications, RBAC, reporting, and compliance.
 
+For iyzico payment SDK details and test card references, see [`docs/backend/iyzipay-java.md`](docs/backend/iyzipay-java.md).
+
 ## Facebook Lead Fetch API
 
 > Looking for the full frontend playbook? See [`docs/frontend/facebook-lead-sync.md`](docs/frontend/facebook-lead-sync.md).

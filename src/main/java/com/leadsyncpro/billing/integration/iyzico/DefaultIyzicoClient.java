@@ -2,6 +2,12 @@ package com.leadsyncpro.billing.integration.iyzico;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.iyzipay.IyzipayResource;
+import com.iyzipay.Options;
+import com.iyzipay.model.Card;
+import com.iyzipay.model.Locale;
+import com.iyzipay.model.PaymentCard;
+import com.iyzipay.request.CreateCardRequest;
 import com.leadsyncpro.billing.config.IyzicoProperties;
 import com.leadsyncpro.model.billing.Customer;
 import com.leadsyncpro.model.billing.PaymentMethod;
@@ -25,7 +31,6 @@ import javax.crypto.spec.SecretKeySpec;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import org.springframework.util.StringUtils;
-import org.springframework.web.client.RestTemplate;
 
 @Slf4j
 public class DefaultIyzicoClient implements IyzicoClient {
@@ -34,7 +39,6 @@ public class DefaultIyzicoClient implements IyzicoClient {
     private static final String SIGNATURE_ALGORITHM = "HmacSHA256";
     private static final String SANDBOX_BASE_URL = "https://sandbox-api.iyzipay.com";
 
-    private final RestTemplate restTemplate;
     private final IyzicoProperties properties;
     private final ObjectMapper objectMapper;
     private final Options options;
@@ -42,12 +46,10 @@ public class DefaultIyzicoClient implements IyzicoClient {
     private final Tracer tracer;
 
     public DefaultIyzicoClient(
-            RestTemplate restTemplate,
             IyzicoProperties properties,
             ObjectMapper objectMapper,
             MeterRegistry meterRegistry,
             Tracer tracer) {
-        this.restTemplate = Objects.requireNonNull(restTemplate, "restTemplate must not be null");
         this.properties = Objects.requireNonNull(properties, "properties must not be null");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
         this.meterRegistry = Objects.requireNonNull(meterRegistry, "meterRegistry must not be null");
@@ -79,19 +81,36 @@ public class DefaultIyzicoClient implements IyzicoClient {
     @Override
     public String tokenizePaymentMethod(
             String cardHolderName, String cardNumber, String expireMonth, String expireYear, String cvc) {
-        Map<String, Object> request = new HashMap<>();
-        request.put("cardHolderName", cardHolderName);
-        request.put("cardNumber", maskCardNumber(cardNumber));
-        request.put("expireMonth", expireMonth);
-        request.put("expireYear", expireYear);
-        request.put("cvc", "***");
-        logRequest("tokenizePaymentMethod", request);
+        Map<String, Object> sanitizedCard = new HashMap<>();
+        sanitizedCard.put("cardHolderName", cardHolderName);
+        sanitizedCard.put("cardNumber", maskCardNumber(cardNumber));
+        sanitizedCard.put("expireMonth", expireMonth);
+        sanitizedCard.put("expireYear", expireYear);
+        sanitizedCard.put("cvc", "***");
+        logRequest("tokenizePaymentMethod", sanitizedCard);
+
+        CreateCardRequest request = new CreateCardRequest();
+        request.setLocale(Locale.EN.getValue());
+        request.setConversationId(generateExternalId("conv"));
+        request.setExternalId(generateExternalId("card"));
+        request.setEmail("anonymous@leadsyncpro.local");
+
+        PaymentCard paymentCard = new PaymentCard();
+        paymentCard.setCardHolderName(cardHolderName);
+        paymentCard.setCardNumber(cardNumber);
+        paymentCard.setExpireMonth(expireMonth);
+        paymentCard.setExpireYear(expireYear);
+        paymentCard.setRegisterCard(1);
+        paymentCard.setCvc(cvc);
+        request.setCard(paymentCard);
+
         return recordLatency(
                 "tokenize_payment_method",
                 () -> {
-                    String token = generateExternalId("tok");
-                    logResponse("tokenizePaymentMethod", Map.of("token", token));
-                    return token;
+                    Card card = Card.create(request, options);
+                    validateIyzipayResponse(card, "tokenizePaymentMethod");
+                    logResponse("tokenizePaymentMethod", Map.of("token", card.getCardToken()));
+                    return card.getCardToken();
                 },
                 "Failed to tokenize payment method");
     }
@@ -217,8 +236,6 @@ public class DefaultIyzicoClient implements IyzicoClient {
         opts.setApiKey(properties.getApiKey());
         opts.setSecretKey(properties.getSecretKey());
         opts.setBaseUrl(getBaseUrl());
-        opts.setConnectionTimeout((int) DEFAULT_TIMEOUT.toMillis());
-        opts.setReadTimeout((int) DEFAULT_TIMEOUT.toMillis());
         return opts;
     }
 
@@ -330,6 +347,15 @@ public class DefaultIyzicoClient implements IyzicoClient {
     private String currentSpanId() {
         Span span = tracer.currentSpan();
         return span != null ? span.context().spanId() : "-";
+    }
+
+    private void validateIyzipayResponse(IyzipayResource resource, String operation) {
+        if (resource == null || !"success".equalsIgnoreCase(resource.getStatus())) {
+            String errorMessage = resource != null
+                    ? "%s failed: %s".formatted(operation, resource.getErrorMessage())
+                    : "%s failed with null response".formatted(operation);
+            throw new IyzicoException(errorMessage);
+        }
     }
 
     private static final class MessageDigestEquality {

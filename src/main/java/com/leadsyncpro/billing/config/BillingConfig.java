@@ -18,23 +18,16 @@ import com.leadsyncpro.repository.billing.PriceRepository;
 import com.leadsyncpro.repository.billing.SeatAllocationRepository;
 import com.leadsyncpro.repository.billing.SubscriptionRepository;
 import java.time.Clock;
-import java.time.Duration;
 import java.time.ZoneId;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.tracing.Tracer;
-import org.springframework.boot.http.client.ClientHttpRequestFactorySettings;
-import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.retry.annotation.EnableRetry;
-import org.springframework.web.client.RestTemplate;
 
 @Configuration
 @EnableRetry
 public class BillingConfig {
-
-    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(10);
-    private static final Duration READ_TIMEOUT = Duration.ofSeconds(10);
 
     private final IyzicoProperties iyzicoProperties;
     private final BillingProperties billingProperties;
@@ -45,24 +38,11 @@ public class BillingConfig {
     }
 
     @Bean
-    public RestTemplate iyzicoRestTemplate(RestTemplateBuilder restTemplateBuilder) {
-        ClientHttpRequestFactorySettings requestFactorySettings = ClientHttpRequestFactorySettings.defaults()
-                .withConnectTimeout(CONNECT_TIMEOUT)
-                .withReadTimeout(READ_TIMEOUT);
-
-        return restTemplateBuilder
-                .requestFactorySettings(requestFactorySettings)
-                .build();
-    }
-
-    @Bean
     public IyzicoClient iyzicoClient(
-            RestTemplate iyzicoRestTemplate,
             ObjectMapper objectMapper,
             MeterRegistry meterRegistry,
             Tracer tracer) {
-        return new DefaultIyzicoClient(
-                iyzicoRestTemplate, iyzicoProperties, objectMapper, meterRegistry, tracer);
+        return new DefaultIyzicoClient(iyzicoProperties, objectMapper, meterRegistry, tracer);
     }
 
     @Bean
