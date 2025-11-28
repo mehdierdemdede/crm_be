@@ -96,6 +96,7 @@ public class DefaultIyzicoClient implements IyzicoClient {
         request.setEmail("anonymous@leadsyncpro.local");
 
         CardInformation cardInformation = new CardInformation();
+        cardInformation.setCardAlias(maskCardNumber(cardNumber));
         cardInformation.setCardHolderName(cardHolderName);
         cardInformation.setCardNumber(cardNumber);
         cardInformation.setExpireMonth(expireMonth);
