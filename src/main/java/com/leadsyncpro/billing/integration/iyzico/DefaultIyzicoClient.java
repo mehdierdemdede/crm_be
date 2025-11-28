@@ -5,8 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.iyzipay.IyzipayResource;
 import com.iyzipay.Options;
 import com.iyzipay.model.Card;
+import com.iyzipay.model.CardInformation;
 import com.iyzipay.model.Locale;
-import com.iyzipay.model.PaymentCard;
 import com.iyzipay.request.CreateCardRequest;
 import com.leadsyncpro.billing.config.IyzicoProperties;
 import com.leadsyncpro.model.billing.Customer;
@@ -95,14 +95,12 @@ public class DefaultIyzicoClient implements IyzicoClient {
         request.setExternalId(generateExternalId("card"));
         request.setEmail("anonymous@leadsyncpro.local");
 
-        PaymentCard paymentCard = new PaymentCard();
-        paymentCard.setCardHolderName(cardHolderName);
-        paymentCard.setCardNumber(cardNumber);
-        paymentCard.setExpireMonth(expireMonth);
-        paymentCard.setExpireYear(expireYear);
-        paymentCard.setRegisterCard(1);
-        paymentCard.setCvc(cvc);
-        request.setCard(paymentCard);
+        CardInformation cardInformation = new CardInformation();
+        cardInformation.setCardHolderName(cardHolderName);
+        cardInformation.setCardNumber(cardNumber);
+        cardInformation.setExpireMonth(expireMonth);
+        cardInformation.setExpireYear(expireYear);
+        request.setCard(cardInformation);
 
         return recordLatency(
                 "tokenize_payment_method",
