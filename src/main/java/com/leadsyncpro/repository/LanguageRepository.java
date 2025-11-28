@@ -13,6 +13,8 @@ import java.util.UUID;
 public interface LanguageRepository extends JpaRepository<Language, UUID> {
     Optional<Language> findByCodeIgnoreCase(String code);
 
+    List<Language> findByActiveTrueOrderByNameAsc();
+
     @Query("SELECT l FROM Language l " +
             "WHERE l.active = true AND (" +
             "LOWER(l.name) LIKE LOWER(CONCAT('%', :query, '%')) OR " +

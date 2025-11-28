@@ -1,6 +1,7 @@
 package com.leadsyncpro.service;
 
 import com.leadsyncpro.dto.LanguageCatalogResponse;
+import com.leadsyncpro.dto.LanguageOptionResponse;
 import com.leadsyncpro.dto.LanguageRequest;
 import com.leadsyncpro.dto.LanguageResponse;
 import com.leadsyncpro.exception.ResourceNotFoundException;
@@ -27,6 +28,18 @@ public class LanguageService {
         return languageRepository.findAll(Sort.by(Sort.Direction.ASC, "name"))
                 .stream()
                 .map(this::toResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<LanguageOptionResponse> findActiveLanguages() {
+        return languageRepository.findByActiveTrueOrderByNameAsc()
+                .stream()
+                .map(language -> new LanguageOptionResponse(
+                        language.getCode(),
+                        language.getName(),
+                        language.getFlagEmoji()
+                ))
                 .toList();
     }
 
