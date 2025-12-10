@@ -9,6 +9,7 @@ import com.leadsyncpro.model.Role;
 import com.leadsyncpro.security.UserPrincipal;
 import com.leadsyncpro.service.IntegrationService;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -28,6 +29,9 @@ public class IntegrationController {
 
     private final IntegrationService integrationService;
 
+    @Value("${app.frontend.base-url}")
+    private String frontendBaseUrl;
+
     public IntegrationController(IntegrationService integrationService) {
         this.integrationService = integrationService;
     }
@@ -35,27 +39,43 @@ public class IntegrationController {
     @GetMapping("/oauth2/authorize/{registrationId}")
     @PreAuthorize("hasAuthority('SUPER_ADMIN')")
     public ResponseEntity<String> authorizeIntegration(@PathVariable String registrationId,
-                                                       @AuthenticationPrincipal UserPrincipal currentUser,
-                                                       HttpServletRequest request,
-                                                       @RequestParam(value = "organizationId", required = false)
-                                                       UUID organizationIdParam) {
+            @AuthenticationPrincipal UserPrincipal currentUser,
+            HttpServletRequest request,
+            @RequestParam(value = "organizationId", required = false) UUID organizationIdParam) {
         UUID organizationId = resolveOrganizationId(currentUser, organizationIdParam);
         String requestBaseUrl = determineRequestBaseUrl(request);
         String authorizationUrl = integrationService.getAuthorizationUrl(
                 registrationId,
                 organizationId,
                 currentUser.getId(),
-                requestBaseUrl
-        );
+                requestBaseUrl);
         return ResponseEntity.ok(authorizationUrl);
+    }
+
+    @GetMapping("/oauth2/callback/{registrationId}")
+    public void completeIntegration(@PathVariable String registrationId,
+            @RequestParam String code,
+            @RequestParam String state,
+            HttpServletRequest request,
+            jakarta.servlet.http.HttpServletResponse response) throws java.io.IOException {
+        String requestBaseUrl = determineRequestBaseUrl(request);
+        try {
+            integrationService.handleOAuth2Callback(registrationId, code, state, requestBaseUrl);
+            // Başarılı ise frontend başarı sayfasına yönlendir
+            response.sendRedirect(frontendBaseUrl + "/integrations/facebook/callback?status=success");
+        } catch (Exception e) {
+            // Hata varsa frontend hata sayfasına yönlendir
+            response.sendRedirect(
+                    frontendBaseUrl + "/integrations/facebook/callback?status=error&message="
+                            + java.net.URLEncoder.encode(e.getMessage(), java.nio.charset.StandardCharsets.UTF_8));
+        }
     }
 
     @GetMapping("/{platform}")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'SUPER_ADMIN')")
     public ResponseEntity<IntegrationConfig> getIntegration(@PathVariable String platform,
-                                                            @AuthenticationPrincipal UserPrincipal currentUser,
-                                                            @RequestParam(value = "organizationId", required = false)
-                                                            UUID organizationIdParam) {
+            @AuthenticationPrincipal UserPrincipal currentUser,
+            @RequestParam(value = "organizationId", required = false) UUID organizationIdParam) {
         UUID organizationId = resolveOrganizationId(currentUser, organizationIdParam);
 
         IntegrationPlatform integrationPlatform = resolvePlatform(platform);
@@ -79,9 +99,8 @@ public class IntegrationController {
     @PostMapping("/fetch-leads/{platform}")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'SUPER_ADMIN')")
     public ResponseEntity<LeadSyncResult> fetchLeadsManually(@PathVariable String platform,
-                                                             @AuthenticationPrincipal UserPrincipal currentUser,
-                                                             @RequestParam(value = "organizationId", required = false)
-                                                             UUID organizationIdParam) {
+            @AuthenticationPrincipal UserPrincipal currentUser,
+            @RequestParam(value = "organizationId", required = false) UUID organizationIdParam) {
         UUID organizationId = resolveOrganizationId(currentUser, organizationIdParam);
 
         IntegrationPlatform integrationPlatform = resolvePlatform(platform);
@@ -249,8 +268,7 @@ public class IntegrationController {
                     scheme,
                     hostPort.host(),
                     hostPort.port(),
-                    extractToken(first, "prefix")
-            );
+                    extractToken(first, "prefix"));
         }
 
         private static HostPort splitHostAndPort(String value) {
