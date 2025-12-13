@@ -3,8 +3,6 @@ package com.leadsyncpro.billing.config;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leadsyncpro.billing.facade.DefaultSubscriptionFacade;
 import com.leadsyncpro.billing.facade.SubscriptionFacade;
-import com.leadsyncpro.billing.integration.iyzico.DefaultIyzicoClient;
-import com.leadsyncpro.billing.integration.iyzico.IyzicoClient;
 import com.leadsyncpro.billing.metrics.SubscriptionStatusMetrics;
 import com.leadsyncpro.billing.money.MoneyRounding;
 import com.leadsyncpro.billing.service.InvoicingService;
@@ -29,20 +27,10 @@ import org.springframework.retry.annotation.EnableRetry;
 @EnableRetry
 public class BillingConfig {
 
-    private final IyzicoProperties iyzicoProperties;
     private final BillingProperties billingProperties;
 
-    public BillingConfig(IyzicoProperties iyzicoProperties, BillingProperties billingProperties) {
-        this.iyzicoProperties = iyzicoProperties;
+    public BillingConfig(BillingProperties billingProperties) {
         this.billingProperties = billingProperties;
-    }
-
-    @Bean
-    public IyzicoClient iyzicoClient(
-            ObjectMapper objectMapper,
-            MeterRegistry meterRegistry,
-            Tracer tracer) {
-        return new DefaultIyzicoClient(iyzicoProperties, objectMapper, meterRegistry, tracer);
     }
 
     @Bean
@@ -76,7 +64,6 @@ public class BillingConfig {
             SeatAllocationRepository seatAllocationRepository,
             InvoiceRepository invoiceRepository,
             SubscriptionService subscriptionService,
-            IyzicoClient iyzicoClient,
             SubscriptionStatusMetrics subscriptionStatusMetrics) {
         return new DefaultSubscriptionFacade(
                 subscriptionRepository,
@@ -87,7 +74,6 @@ public class BillingConfig {
                 seatAllocationRepository,
                 invoiceRepository,
                 subscriptionService,
-                iyzicoClient,
                 subscriptionStatusMetrics);
     }
 }

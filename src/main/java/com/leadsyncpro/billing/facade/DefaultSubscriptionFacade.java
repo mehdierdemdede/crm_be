@@ -1,8 +1,5 @@
 package com.leadsyncpro.billing.facade;
 
-import com.leadsyncpro.billing.integration.iyzico.IyzicoClient;
-import com.leadsyncpro.billing.integration.iyzico.IyzicoSubscriptionResponse;
-import com.leadsyncpro.billing.integration.iyzico.ProrationBehavior;
 import com.leadsyncpro.billing.metrics.SubscriptionStatusMetrics;
 import com.leadsyncpro.billing.service.SubscriptionService;
 import com.leadsyncpro.model.billing.Customer;
@@ -42,7 +39,6 @@ public class DefaultSubscriptionFacade implements SubscriptionFacade {
     private final SeatAllocationRepository seatAllocationRepository;
     private final InvoiceRepository invoiceRepository;
     private final SubscriptionService subscriptionService;
-    private final IyzicoClient iyzicoClient;
     private final SubscriptionStatusMetrics subscriptionStatusMetrics;
 
     public DefaultSubscriptionFacade(
@@ -54,21 +50,16 @@ public class DefaultSubscriptionFacade implements SubscriptionFacade {
             SeatAllocationRepository seatAllocationRepository,
             InvoiceRepository invoiceRepository,
             SubscriptionService subscriptionService,
-            IyzicoClient iyzicoClient,
             SubscriptionStatusMetrics subscriptionStatusMetrics) {
         this.subscriptionRepository = Objects.requireNonNull(subscriptionRepository, "subscriptionRepository");
         this.customerRepository = Objects.requireNonNull(customerRepository, "customerRepository");
         this.planRepository = Objects.requireNonNull(planRepository, "planRepository");
         this.priceRepository = Objects.requireNonNull(priceRepository, "priceRepository");
-        this.paymentMethodRepository =
-                Objects.requireNonNull(paymentMethodRepository, "paymentMethodRepository");
-        this.seatAllocationRepository =
-                Objects.requireNonNull(seatAllocationRepository, "seatAllocationRepository");
+        this.paymentMethodRepository = Objects.requireNonNull(paymentMethodRepository, "paymentMethodRepository");
+        this.seatAllocationRepository = Objects.requireNonNull(seatAllocationRepository, "seatAllocationRepository");
         this.invoiceRepository = Objects.requireNonNull(invoiceRepository, "invoiceRepository");
         this.subscriptionService = Objects.requireNonNull(subscriptionService, "subscriptionService");
-        this.iyzicoClient = Objects.requireNonNull(iyzicoClient, "iyzicoClient");
-        this.subscriptionStatusMetrics =
-                Objects.requireNonNull(subscriptionStatusMetrics, "subscriptionStatusMetrics");
+        this.subscriptionStatusMetrics = Objects.requireNonNull(subscriptionStatusMetrics, "subscriptionStatusMetrics");
     }
 
     @Override
@@ -79,7 +70,8 @@ public class DefaultSubscriptionFacade implements SubscriptionFacade {
             Plan plan = loadPlan(cmd.planCode());
             Price price = loadPrice(plan, cmd.billingPeriod());
 
-            PaymentMethod paymentMethod = resolvePaymentMethod(customer, cmd.cardToken());
+            // PaymentMethod logic simplified/removed as we moved to manual sales
+            PaymentMethod paymentMethod = resolvePaymentMethod(customer);
 
             Instant startAt = Instant.now();
             Instant trialEndAt = cmd.trialDays() != null && cmd.trialDays() > 0
@@ -90,9 +82,14 @@ public class DefaultSubscriptionFacade implements SubscriptionFacade {
                     customer, plan, price, cmd.seatCount(), startAt, trialEndAt);
             subscription.setPaymentMethod(paymentMethod);
 
-            IyzicoSubscriptionResponse response =
-                    iyzicoClient.createSubscription(customer, price, cmd.seatCount(), paymentMethod);
-            applyGatewayState(subscription, response);
+            // Removed Iyzico integration
+            // Manual integration: Assume subscription is active or pending based on trial
+            if (trialEndAt == null) {
+                // Without payment gateway, we might default to ACTIVE or force manual
+                // activation?
+                // For now, let's assume it's created as-is.
+                subscription.setStatus(SubscriptionStatus.ACTIVE);
+            }
 
             Subscription saved = saveSubscriptionWithAllocations(subscription);
             return toDto(saved);
@@ -112,14 +109,12 @@ public class DefaultSubscriptionFacade implements SubscriptionFacade {
     @Transactional
     public SubscriptionDto changePlan(UUID subscriptionId, ChangePlanCmd cmd) {
         Subscription subscription = loadSubscription(subscriptionId);
-        ensureHasGatewayReference(subscription);
         try {
             Plan newPlan = loadPlan(cmd.planCode());
             Price newPrice = loadPrice(newPlan, cmd.billingPeriod());
 
             subscriptionService.changePlan(subscription, newPlan, newPrice, Instant.now());
-            iyzicoClient.changeSubscriptionPlan(
-                    subscription.getExternalSubscriptionId(), newPrice, mapProration(cmd.prorationOrDefault()));
+            // Removed Iyzico integration
 
             Subscription saved = saveSubscriptionWithAllocations(subscription);
             return toDto(saved);
@@ -137,13 +132,12 @@ public class DefaultSubscriptionFacade implements SubscriptionFacade {
     @Transactional
     public SubscriptionDto updateSeats(UUID subscriptionId, int seatCount, Proration proration) {
         Subscription subscription = loadSubscription(subscriptionId);
-        ensureHasGatewayReference(subscription);
-        Proration resolved = proration != null ? proration : Proration.defaultValue();
+        // Proration unused without payment calc, but logic remains valid for internal
+        // records
         try {
-            boolean paymentCollected = resolved == Proration.IMMEDIATE;
-            subscriptionService.updateSeats(subscription, seatCount, Instant.now(), paymentCollected);
-            iyzicoClient.updateSeatCount(
-                    subscription.getExternalSubscriptionId(), seatCount, mapProration(resolved));
+            // Passing false for paymentCollected as we don't have auto-charge.
+            subscriptionService.updateSeats(subscription, seatCount, Instant.now(), false);
+            // Removed Iyzico integration
 
             Subscription saved = saveSubscriptionWithAllocations(subscription);
             return toDto(saved);
@@ -161,9 +155,8 @@ public class DefaultSubscriptionFacade implements SubscriptionFacade {
     @Transactional
     public void cancel(UUID subscriptionId, boolean cancelAtPeriodEnd) {
         Subscription subscription = loadSubscription(subscriptionId);
-        ensureHasGatewayReference(subscription);
         try {
-            iyzicoClient.cancelSubscription(subscription.getExternalSubscriptionId(), cancelAtPeriodEnd);
+            // Removed Iyzico integration
             if (cancelAtPeriodEnd) {
                 subscription.setCancelAtPeriodEnd(true);
                 if (subscription.getStatus() == SubscriptionStatus.TRIAL) {
@@ -230,34 +223,10 @@ public class DefaultSubscriptionFacade implements SubscriptionFacade {
         }
     }
 
-    private PaymentMethod resolvePaymentMethod(Customer customer, String cardToken) {
-        if (StringUtils.hasText(cardToken)) {
-            String tokenRef = iyzicoClient.createOrAttachPaymentMethod(customer, cardToken);
-            PaymentMethod paymentMethod = PaymentMethod.builder()
-                    .customer(customer)
-                    .tokenRef(tokenRef)
-                    .defaultMethod(true)
-                    .build();
-            PaymentMethod saved = paymentMethodRepository.save(paymentMethod);
-            if (customer.getPaymentMethods() != null) {
-                customer.getPaymentMethods().add(saved);
-            }
-            return saved;
-        }
+    private PaymentMethod resolvePaymentMethod(Customer customer) {
         return paymentMethodRepository
                 .findByCustomerAndDefaultMethodIsTrue(customer)
-                .orElseThrow(() -> new SubscriptionOperationException(
-                        "Customer %s does not have a default payment method".formatted(customer.getId())));
-    }
-
-    private void applyGatewayState(Subscription subscription, IyzicoSubscriptionResponse response) {
-        subscription.setExternalSubscriptionId(response.subscriptionId());
-        subscription.setCurrentPeriodStart(response.currentPeriodStart());
-        subscription.setCurrentPeriodEnd(response.currentPeriodEnd());
-        subscription.setCancelAtPeriodEnd(response.cancelAtPeriodEnd());
-        if (response.cancelAtPeriodEnd() && subscription.getStatus() == SubscriptionStatus.ACTIVE) {
-            subscriptionStatusMetrics.updateStatus(subscription, SubscriptionStatus.CANCELED);
-        }
+                .orElse(null);
     }
 
     private SubscriptionDto toDto(Subscription subscription) {
@@ -309,8 +278,7 @@ public class DefaultSubscriptionFacade implements SubscriptionFacade {
     private Customer loadCustomer(UUID customerId) {
         return customerRepository
                 .findById(customerId)
-                .orElseThrow(() ->
-                        new SubscriptionNotFoundException("Customer %s not found".formatted(customerId)));
+                .orElseThrow(() -> new SubscriptionNotFoundException("Customer %s not found".formatted(customerId)));
     }
 
     private Plan loadPlan(String planCode) {
@@ -330,21 +298,7 @@ public class DefaultSubscriptionFacade implements SubscriptionFacade {
     private Subscription loadSubscription(UUID subscriptionId) {
         return subscriptionRepository
                 .findById(subscriptionId)
-                .orElseThrow(() ->
-                        new SubscriptionNotFoundException("Subscription %s not found".formatted(subscriptionId)));
+                .orElseThrow(
+                        () -> new SubscriptionNotFoundException("Subscription %s not found".formatted(subscriptionId)));
     }
-
-    private void ensureHasGatewayReference(Subscription subscription) {
-        if (!StringUtils.hasText(subscription.getExternalSubscriptionId())) {
-            throw new SubscriptionOperationException("Subscription is not linked to the payment gateway");
-        }
-    }
-
-    private ProrationBehavior mapProration(Proration proration) {
-        return switch (proration) {
-            case IMMEDIATE -> ProrationBehavior.IMMEDIATE;
-            case DEFERRED -> ProrationBehavior.DEFERRED;
-        };
-    }
-
 }

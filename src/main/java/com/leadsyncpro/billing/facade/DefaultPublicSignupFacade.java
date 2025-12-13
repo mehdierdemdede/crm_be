@@ -46,11 +46,11 @@ public class DefaultPublicSignupFacade implements PublicSignupFacade {
             InviteService inviteService) {
         this.planRepository = Objects.requireNonNull(planRepository, "planRepository must not be null");
         this.priceRepository = Objects.requireNonNull(priceRepository, "priceRepository must not be null");
-        this.organizationRepository =
-                Objects.requireNonNull(organizationRepository, "organizationRepository must not be null");
+        this.organizationRepository = Objects.requireNonNull(organizationRepository,
+                "organizationRepository must not be null");
         this.userRepository = Objects.requireNonNull(userRepository, "userRepository must not be null");
-        this.publicSignupRepository =
-                Objects.requireNonNull(publicSignupRepository, "publicSignupRepository must not be null");
+        this.publicSignupRepository = Objects.requireNonNull(publicSignupRepository,
+                "publicSignupRepository must not be null");
         this.inviteService = Objects.requireNonNull(inviteService, "inviteService must not be null");
     }
 
@@ -61,8 +61,8 @@ public class DefaultPublicSignupFacade implements PublicSignupFacade {
 
         Plan plan = planRepository
                 .findById(command.planId())
-                .orElseThrow(() ->
-                        new PublicSignupException(HttpStatus.NOT_FOUND, "Plan %s not found".formatted(command.planId())));
+                .orElseThrow(() -> new PublicSignupException(HttpStatus.NOT_FOUND,
+                        "Plan %s not found".formatted(command.planId())));
 
         Price price = priceRepository
                 .findByPlanAndBillingPeriod(plan, command.billingPeriod())
@@ -183,9 +183,9 @@ public class DefaultPublicSignupFacade implements PublicSignupFacade {
     private String resolveStatusMessage(Price price) {
         Integer trialDays = price.getTrialDays();
         if (trialDays != null && trialDays > 0) {
-            return "Invitation email sent. Trial period of %d days activated; payment will be collected after the trial ends."
+            return "Invitation email sent. Trial period of %d days activated."
                     .formatted(trialDays);
         }
-        return "Invitation email sent after successful iyzico payment.";
+        return "Invitation email sent.";
     }
 }

@@ -8,8 +8,7 @@ public record CreateSubscriptionCmd(
         String planCode,
         BillingPeriod billingPeriod,
         int seatCount,
-        Integer trialDays,
-        String cardToken) {
+        Integer trialDays) {
 
     public CreateSubscriptionCmd {
         if (customerId == null) {
