@@ -358,12 +358,32 @@ public class LeadService {
     }
 
     private SaleResponse mapToSaleResponse(Sale sale) {
+        java.util.List<String> transferList = new java.util.ArrayList<>();
+        if (sale.getTransferJson() != null && !sale.getTransferJson().isBlank()) {
+            // Simple JSON array parser for ["A", "B"] format
+            String json = sale.getTransferJson().trim();
+            if (json.startsWith("[") && json.endsWith("]")) {
+                String content = json.substring(1, json.length() - 1);
+                for (String part : content.split(",")) {
+                    String clean = part.trim().replace("\"", "");
+                    if (!clean.isEmpty()) {
+                        transferList.add(clean);
+                    }
+                }
+            }
+        }
+
         return SaleResponse.builder()
                 .id(sale.getId())
                 .leadId(sale.getLead() != null ? sale.getLead().getId() : null)
-                .productName(sale.getOperationType())
-                .amount(sale.getPrice())
+                .operationType(sale.getOperationType())
+                .price(sale.getPrice())
                 .currency(sale.getCurrency())
+                .hotel(sale.getHotel())
+                .nights(sale.getNights())
+                .transfer(transferList)
+                .documentPath(sale.getDocumentPath())
+                .operationDate(sale.getCreatedAt()) // Using createdAt as operation date for now
                 .createdAt(sale.getCreatedAt())
                 .build();
     }

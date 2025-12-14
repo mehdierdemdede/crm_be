@@ -50,7 +50,8 @@ public class SalesService {
             try {
                 String dirPath = "";
                 File dir = new File(dirPath);
-                if (!dir.exists()) dir.mkdirs();
+                if (!dir.exists())
+                    dir.mkdirs();
 
                 String filename = UUID.randomUUID() + "_" + file.getOriginalFilename();
                 File dest = new File(dir, filename);
@@ -85,12 +86,37 @@ public class SalesService {
     }
 
     private SaleResponse mapToSaleResponse(Sale sale) {
+        java.util.List<String> transferList = new java.util.ArrayList<>();
+        if (sale.getTransferJson() != null && !sale.getTransferJson().isBlank()) {
+            try {
+                transferList = objectMapper.readValue(sale.getTransferJson(),
+                        new com.fasterxml.jackson.core.type.TypeReference<java.util.List<String>>() {
+                        });
+            } catch (Exception e) {
+                // fallback simple parser or ignore
+                String json = sale.getTransferJson().trim();
+                if (json.startsWith("[") && json.endsWith("]")) {
+                    String content = json.substring(1, json.length() - 1);
+                    for (String part : content.split(",")) {
+                        String clean = part.trim().replace("\"", "");
+                        if (!clean.isEmpty())
+                            transferList.add(clean);
+                    }
+                }
+            }
+        }
+
         return SaleResponse.builder()
                 .id(sale.getId())
                 .leadId(sale.getLead() != null ? sale.getLead().getId() : null)
-                .productName(sale.getOperationType())
-                .amount(sale.getPrice())
+                .operationType(sale.getOperationType())
+                .price(sale.getPrice())
                 .currency(sale.getCurrency())
+                .hotel(sale.getHotel())
+                .nights(sale.getNights())
+                .transfer(transferList)
+                .documentPath(sale.getDocumentPath())
+                .operationDate(sale.getCreatedAt())
                 .createdAt(sale.getCreatedAt())
                 .build();
     }
