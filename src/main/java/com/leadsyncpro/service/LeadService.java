@@ -39,9 +39,10 @@ public class LeadService {
     private final SalesRepository salesRepository;
 
     public LeadService(LeadRepository leadRepository,
-                       CampaignRepository campaignRepository,
-                       UserRepository userRepository,
-                       LeadStatusLogRepository leadStatusLogRepository, LeadActivityLogRepository leadActivityLogRepository, AutoAssignService autoAssignService, MailService mailService, SalesRepository salesRepository) {
+            CampaignRepository campaignRepository,
+            UserRepository userRepository,
+            LeadStatusLogRepository leadStatusLogRepository, LeadActivityLogRepository leadActivityLogRepository,
+            AutoAssignService autoAssignService, MailService mailService, SalesRepository salesRepository) {
         this.leadRepository = leadRepository;
         this.campaignRepository = campaignRepository;
         this.userRepository = userRepository;
@@ -94,8 +95,7 @@ public class LeadService {
                         saved.getCampaign() != null ? saved.getCampaign().getName() : null,
                         saved.getLanguage(),
                         saved.getStatus().name(),
-                        saved.getId().toString()
-                );
+                        saved.getId().toString());
             } catch (Exception e) {
                 logger.warn("Lead atama bildirimi gönderilemedi: {}", e.getMessage());
             }
@@ -118,11 +118,16 @@ public class LeadService {
             throw new SecurityException("Access denied: Lead does not belong to this organization.");
         }
 
-        if (request.getName() != null) lead.setName(request.getName());
-        if (request.getPhone() != null) lead.setPhone(request.getPhone());
-        if (request.getEmail() != null) lead.setEmail(request.getEmail());
-        if (request.getLanguage() != null) lead.setLanguage(request.getLanguage());
-        if (request.getNotes() != null) lead.setNotes(request.getNotes());
+        if (request.getName() != null)
+            lead.setName(request.getName());
+        if (request.getPhone() != null)
+            lead.setPhone(request.getPhone());
+        if (request.getEmail() != null)
+            lead.setEmail(request.getEmail());
+        if (request.getLanguage() != null)
+            lead.setLanguage(request.getLanguage());
+        if (request.getNotes() != null)
+            lead.setNotes(request.getNotes());
 
         if (request.getStatus() != null) {
             lead.setStatus(LeadStatus.valueOf(request.getStatus().toUpperCase()));
@@ -176,7 +181,8 @@ public class LeadService {
         return mapToLeadResponse(lead);
     }
 
-    public List<Lead> getLeadsByOrganization(UUID organizationId, String campaignName, String status, UUID assignedToUserId) {
+    public List<Lead> getLeadsByOrganization(UUID organizationId, String campaignName, String status,
+            UUID assignedToUserId) {
         UUID campaignId = null;
         if (campaignName != null && !campaignName.isEmpty()) {
             campaignId = campaignRepository.findByOrganizationIdAndName(organizationId, campaignName)
@@ -196,13 +202,13 @@ public class LeadService {
     }
 
     public Page<Lead> getLeadsByOrganizationPaged(UUID organizationId,
-                                                  String search,
-                                                  String status,
-                                                  String language,
-                                                  String campaignId,
-                                                  UUID assignedUserId,
-                                                  Boolean unassigned,
-                                                  Pageable pageable) {
+            String search,
+            String status,
+            String language,
+            String campaignId,
+            UUID assignedUserId,
+            Boolean unassigned,
+            Pageable pageable) {
         Specification<Lead> specification = LeadSpecifications.belongsToOrganization(organizationId);
 
         if (search != null && !search.isBlank()) {
@@ -239,7 +245,6 @@ public class LeadService {
 
         return leadRepository.findAll(specification, pageable);
     }
-
 
     // ───────────────────────────────
     // UPDATE LEAD STATUS
@@ -309,9 +314,46 @@ public class LeadService {
                 .name(lead.getName())
                 .status(lead.getStatus())
                 .phone(lead.getPhone())
-                .messengerPageId(lead.getPageId())
+                .email(lead.getEmail())
+                .language(lead.getLanguage())
+                .notes(lead.getNotes())
+                .messengerPageId(lead.getPageId()) // alias
+                .pageId(lead.getPageId())
                 .lastSaleId(lastSale.map(Sale::getId).orElse(null))
                 .lastSale(lastSaleResponse)
+
+                .campaign(lead.getCampaign() != null ? LeadResponse.CampaignResponse.builder()
+                        .id(lead.getCampaign().getId())
+                        .name(lead.getCampaign().getName())
+                        .build() : null)
+
+                .assignedToUser(lead.getAssignedToUser() != null ? LeadResponse.UserResponse.builder()
+                        .id(lead.getAssignedToUser().getId())
+                        .firstName(lead.getAssignedToUser().getFirstName())
+                        .lastName(lead.getAssignedToUser().getLastName())
+                        .email(lead.getAssignedToUser().getEmail())
+                        .build() : null)
+
+                .createdAt(lead.getCreatedAt())
+                .updatedAt(lead.getUpdatedAt())
+                .firstActionAt(lead.getFirstActionAt())
+
+                .platform(lead.getPlatform())
+                .sourceLeadId(lead.getSourceLeadId())
+                .platformCreatedAt(lead.getPlatformCreatedAt())
+                .formId(lead.getFormId())
+                .formName(lead.getFormName())
+                .organic(lead.getOrganic())
+
+                .adId(lead.getAdId())
+                .adName(lead.getAdName())
+                .adsetId(lead.getAdsetId())
+                .adsetName(lead.getAdsetName())
+                .fbCampaignId(lead.getFbCampaignId())
+                .fbCampaignName(lead.getFbCampaignName())
+
+                .extraFieldsJson(lead.getExtraFieldsJson())
+                .disclaimerResponsesJson(lead.getDisclaimerResponsesJson())
                 .build();
     }
 
@@ -364,7 +406,8 @@ public class LeadService {
 
         List<Lead> leads = leadRepository.findAllById(leadIds);
         for (Lead lead : leads) {
-            if (!lead.getOrganizationId().equals(organizationId)) continue;
+            if (!lead.getOrganizationId().equals(organizationId))
+                continue;
             lead.setAssignedToUser(user);
             lead.setUpdatedAt(Instant.now());
         }
@@ -388,12 +431,14 @@ public class LeadService {
             // Burada bildirim servisini çağırabilirsin
             logger.info("HOT lead {} ({}): 7 gün geçti, satış yapılmadı → Uyarı gönderiliyor.",
                     lead.getId(), lead.getName());
-            // notificationService.notifyUser(lead.getAssignedToUser(), "Sıcak hasta için 7 gün geçti, satış yapılmadı!");
+            // notificationService.notifyUser(lead.getAssignedToUser(), "Sıcak hasta için 7
+            // gün geçti, satış yapılmadı!");
         }
 
         // 2️⃣ NOT_INTERESTED → ertesi gün Super User’a aktar
         Instant oneDayAgo = now.minus(1, ChronoUnit.DAYS);
-        List<Lead> uninterestedLeads = leadRepository.findAllByStatusAndUpdatedAtBefore(LeadStatus.NOT_INTERESTED, oneDayAgo);
+        List<Lead> uninterestedLeads = leadRepository.findAllByStatusAndUpdatedAtBefore(LeadStatus.NOT_INTERESTED,
+                oneDayAgo);
         for (Lead lead : uninterestedLeads) {
             transferToSuperUser(lead, "Lead ilgisiz olarak işaretlendi.");
         }
@@ -411,31 +456,34 @@ public class LeadService {
         }
 
         logger.info("""
-        Otomatik lead güncelleme tamamlandı:
-        🔸 HOT kontrolü: {} lead
-        🔸 NOT_INTERESTED → SuperUser: {}
-        🔸 BLOCKED → SuperUser: {}
-        🔸 WRONG_INFO → SuperUser: {}
-        """,
+                Otomatik lead güncelleme tamamlandı:
+                🔸 HOT kontrolü: {} lead
+                🔸 NOT_INTERESTED → SuperUser: {}
+                🔸 BLOCKED → SuperUser: {}
+                🔸 WRONG_INFO → SuperUser: {}
+                """,
                 hotLeads.size(),
                 uninterestedLeads.size(),
                 blockedLeads.size(),
-                wrongLeads.size()
-        );
+                wrongLeads.size());
     }
 
     // Yardımcı: ISO Instant parse (null-safe)
     private Instant parseOrDefault(String iso, Instant def) {
-        if (iso == null || iso.isBlank()) return def;
-        try { return Instant.parse(iso); } catch (Exception e) { return def; }
+        if (iso == null || iso.isBlank())
+            return def;
+        try {
+            return Instant.parse(iso);
+        } catch (Exception e) {
+            return def;
+        }
     }
 
     private void transferToSuperUser(Lead lead, String reason) {
         try {
             // Super User bul (rolü SUPER_ADMIN olan)
             Optional<User> superUserOpt = userRepository.findFirstByOrganizationIdAndRole(
-                    lead.getOrganizationId(), Role.SUPER_ADMIN
-            );
+                    lead.getOrganizationId(), Role.SUPER_ADMIN);
 
             if (superUserOpt.isPresent()) {
                 User superUser = superUserOpt.get();
@@ -444,7 +492,8 @@ public class LeadService {
                 logger.info("Lead {} Super User'a aktarıldı. Sebep: {}", lead.getId(), reason);
 
                 // Bildirim gönder (opsiyonel)
-                // notificationService.notifyUser(superUser, "Yeni lead size aktarıldı: " + lead.getName());
+                // notificationService.notifyUser(superUser, "Yeni lead size aktarıldı: " +
+                // lead.getName());
             } else {
                 logger.warn("Super User bulunamadı, lead {} aktarılmadı.", lead.getId());
             }
@@ -453,16 +502,13 @@ public class LeadService {
         }
     }
 
-
     // NEW dışı statüler "contacted" sayılır
     private static final EnumSet<LeadStatus> CONTACTED_STATUSES = EnumSet.of(
             LeadStatus.HOT,
             LeadStatus.SOLD,
             LeadStatus.NOT_INTERESTED,
             LeadStatus.BLOCKED,
-            LeadStatus.WRONG_INFO
-    );
-
+            LeadStatus.WRONG_INFO);
 
     /**
      * Dashboard istatistiklerini döndürür.
@@ -535,7 +581,8 @@ public class LeadService {
                     counted++;
                 }
             }
-            if (counted > 0) avgFirstRespondMinutes = sumMinutes / counted;
+            if (counted > 0)
+                avgFirstRespondMinutes = sumMinutes / counted;
         }
 
         return LeadStatsResponse.builder()
