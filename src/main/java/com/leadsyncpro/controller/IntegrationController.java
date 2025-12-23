@@ -38,7 +38,7 @@ public class IntegrationController {
 
     @GetMapping("/oauth2/authorize/{registrationId}")
     @PreAuthorize("hasAuthority('SUPER_ADMIN')")
-    public ResponseEntity<String> authorizeIntegration(@PathVariable String registrationId,
+    public ResponseEntity<String> authorizeIntegration(@PathVariable("registrationId") String registrationId,
             @AuthenticationPrincipal UserPrincipal currentUser,
             HttpServletRequest request,
             @RequestParam(value = "organizationId", required = false) UUID organizationIdParam) {
@@ -53,9 +53,9 @@ public class IntegrationController {
     }
 
     @GetMapping("/oauth2/callback/{registrationId}")
-    public void completeIntegration(@PathVariable String registrationId,
-            @RequestParam String code,
-            @RequestParam String state,
+    public void completeIntegration(@PathVariable("registrationId") String registrationId,
+            @RequestParam("code") String code,
+            @RequestParam("state") String state,
             HttpServletRequest request,
             jakarta.servlet.http.HttpServletResponse response) throws java.io.IOException {
         String requestBaseUrl = determineRequestBaseUrl(request);
@@ -73,7 +73,7 @@ public class IntegrationController {
 
     @GetMapping("/{platform}")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'SUPER_ADMIN')")
-    public ResponseEntity<IntegrationConfig> getIntegration(@PathVariable String platform,
+    public ResponseEntity<IntegrationConfig> getIntegration(@PathVariable("platform") String platform,
             @AuthenticationPrincipal UserPrincipal currentUser,
             @RequestParam(value = "organizationId", required = false) UUID organizationIdParam) {
         UUID organizationId = resolveOrganizationId(currentUser, organizationIdParam);
@@ -98,7 +98,7 @@ public class IntegrationController {
 
     @PostMapping("/fetch-leads/{platform}")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'SUPER_ADMIN')")
-    public ResponseEntity<LeadSyncResult> fetchLeadsManually(@PathVariable String platform,
+    public ResponseEntity<LeadSyncResult> fetchLeadsManually(@PathVariable("platform") String platform,
             @AuthenticationPrincipal UserPrincipal currentUser,
             @RequestParam(value = "organizationId", required = false) UUID organizationIdParam) {
         UUID organizationId = resolveOrganizationId(currentUser, organizationIdParam);

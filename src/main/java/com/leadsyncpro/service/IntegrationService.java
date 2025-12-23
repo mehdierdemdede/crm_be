@@ -405,16 +405,30 @@ public class IntegrationService {
 
         String redirectUri = resolveRedirectUri(clientRegistration.getRedirectUri(), requestBaseUrl);
 
-        // Facebook için sadece sayfa lead’leri için gereken izinler
-        List<String> scopes = Arrays.asList(
-                "email",
-                "public_profile",
-                "pages_show_list",
-                "pages_read_engagement",
-                "leads_retrieval"
-        );
+        // Platform'a göre scope'ları belirle
+        List<String> scopes;
+        if (platform == IntegrationPlatform.GOOGLE) {
+            // Google OAuth için doğru scope'lar
+            scopes = Arrays.asList(
+                    "openid",
+                    "email",
+                    "profile",
+                    "https://www.googleapis.com/auth/adwords"
+            );
+        } else if (platform == IntegrationPlatform.FACEBOOK) {
+            // Facebook için sayfa lead'leri için gereken izinler
+            scopes = Arrays.asList(
+                    "email",
+                    "public_profile",
+                    "pages_show_list",
+                    "pages_read_engagement",
+                    "leads_retrieval"
+            );
+        } else {
+            throw new IllegalArgumentException("Desteklenmeyen platform: " + platform);
+        }
 
-        String scopeParam = String.join(",", scopes);
+        String scopeParam = String.join(" ", scopes);
         String authorizationUri = clientRegistration.getProviderDetails().getAuthorizationUri();
 
         return UriComponentsBuilder.fromHttpUrl(authorizationUri)
