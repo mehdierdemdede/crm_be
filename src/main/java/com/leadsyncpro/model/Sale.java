@@ -52,6 +52,9 @@ public class Sale {
     @Column(name = "document_path", length = 255)
     private String documentPath;
 
+    @Column(nullable = false)
+    private Instant operationDate;
+
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
 

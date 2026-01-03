@@ -16,6 +16,8 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.UUID;
 
 @Service
@@ -44,6 +46,14 @@ public class SalesService {
         sale.setHotel(req.getHotel());
         sale.setNights(req.getNights());
         sale.setTransferJson(writeJson(req));
+
+        if (req.getOperationDate() != null && !req.getOperationDate().isBlank()) {
+            LocalDate opDate = LocalDate.parse(req.getOperationDate());
+            sale.setOperationDate(opDate.atStartOfDay(ZoneId.systemDefault()).toInstant());
+        } else {
+            sale.setOperationDate(Instant.now());
+        }
+
         sale.setCreatedAt(Instant.now());
 
         // 🔹 Dosya varsa kaydet
@@ -123,7 +133,7 @@ public class SalesService {
                 .nights(sale.getNights())
                 .transfer(transferList)
                 .documentPath(sale.getDocumentPath())
-                .operationDate(sale.getCreatedAt())
+                .operationDate(sale.getOperationDate())
                 .createdAt(sale.getCreatedAt())
                 .build();
     }
