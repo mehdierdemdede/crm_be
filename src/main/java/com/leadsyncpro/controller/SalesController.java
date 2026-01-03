@@ -21,10 +21,19 @@ public class SalesController {
 
     private final SalesService salesService;
 
+    @GetMapping
+    @PreAuthorize("hasAnyAuthority('ADMIN','USER','SUPER_ADMIN')")
+    public ResponseEntity<org.springframework.data.domain.Page<SaleResponse>> getAllSales(
+            @AuthenticationPrincipal UserPrincipal currentUser,
+            org.springframework.data.domain.Pageable pageable) {
+
+        return ResponseEntity.ok(salesService.getAllSales(currentUser.getOrganizationId(), pageable));
+    }
+
     /**
      * 💾 Satış kaydı oluştur (belge yükleme opsiyonel)
      */
-    @PostMapping(consumes = {"multipart/form-data"})
+    @PostMapping(consumes = { "multipart/form-data" })
     @PreAuthorize("hasAnyAuthority('ADMIN','USER','SUPER_ADMIN')")
     public ResponseEntity<SaleResponse> createSale(
             @RequestPart("data") SaleRequest req,
@@ -37,10 +46,22 @@ public class SalesController {
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
+    @PostMapping(consumes = { "application/json" })
+    @PreAuthorize("hasAnyAuthority('ADMIN','USER','SUPER_ADMIN')")
+    public ResponseEntity<SaleResponse> createSaleJson(
+            @RequestBody SaleRequest req,
+            @AuthenticationPrincipal UserPrincipal currentUser) {
+
+        SaleResponse created = salesService.createSale(
+                req, null, currentUser.getOrganizationId(), currentUser.getId());
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(created);
+    }
+
     @GetMapping("/{saleId}")
     @PreAuthorize("hasAnyAuthority('ADMIN','USER','SUPER_ADMIN')")
     public ResponseEntity<SaleResponse> getSaleById(@PathVariable UUID saleId,
-                                                   @AuthenticationPrincipal UserPrincipal currentUser) {
+            @AuthenticationPrincipal UserPrincipal currentUser) {
         SaleResponse response = salesService.getSaleById(saleId, currentUser.getOrganizationId());
         return ResponseEntity.ok(response);
     }

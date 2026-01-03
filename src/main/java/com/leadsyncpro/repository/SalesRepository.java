@@ -8,5 +8,11 @@ import java.util.UUID;
 
 public interface SalesRepository extends JpaRepository<Sale, UUID> {
     Optional<Sale> findTopByLead_IdAndOrganizationIdOrderByCreatedAtDesc(UUID leadId, UUID organizationId);
+
     Optional<Sale> findByIdAndOrganizationId(UUID saleId, UUID organizationId);
+
+    org.springframework.data.domain.Page<Sale> findAllByOrganizationId(UUID organizationId,
+            org.springframework.data.domain.Pageable pageable);
+
+    long countByUserIdAndCreatedAtAfter(UUID userId, java.time.Instant createdAt);
 }

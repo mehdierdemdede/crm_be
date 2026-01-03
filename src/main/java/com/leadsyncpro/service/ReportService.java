@@ -17,90 +17,114 @@ import java.util.stream.Collectors;
 @AllArgsConstructor
 public class ReportService {
 
-    private final LeadRepository leadRepository;
-    private final UserRepository userRepository;
+        private final LeadRepository leadRepository;
+        private final UserRepository userRepository;
 
-    @Data
-    public static class LeadReportResponse {
-        private List<DailyCount> timeline;
-        private List<StatusCount> statusBreakdown;
-        private List<UserPerformance> userPerformance;
-    }
+        public static class LeadReportResponse {
+                private List<DailyCount> timeline;
+                private List<StatusCount> statusBreakdown;
+                private List<UserPerformance> userPerformance;
 
-    @Data
-    @AllArgsConstructor
-    public static class DailyCount {
-        private String date;
-        private long leads;
-    }
+                public List<DailyCount> getTimeline() {
+                        return timeline;
+                }
 
-    @Data
-    @AllArgsConstructor
-    public static class StatusCount {
-        private String status;
-        private long count;
-    }
+                public void setTimeline(List<DailyCount> timeline) {
+                        this.timeline = timeline;
+                }
 
-    @Data
-    @AllArgsConstructor
-    public static class UserPerformance {
-        private String userName;
-        private long sales;
-        private long total;
-    }
+                public List<StatusCount> getStatusBreakdown() {
+                        return statusBreakdown;
+                }
 
-    public LeadReportResponse getLeadReport(UUID orgId, Instant start, Instant end) {
-        List<Lead> leads = leadRepository.findByOrganizationIdAndCreatedAtBetween(orgId, start, end);
+                public void setStatusBreakdown(List<StatusCount> statusBreakdown) {
+                        this.statusBreakdown = statusBreakdown;
+                }
 
-        // 🔹 Timeline: günlük lead sayısı
-        Map<LocalDate, Long> daily = leads.stream()
-                .collect(Collectors.groupingBy(
-                        l -> l.getCreatedAt().atZone(ZoneOffset.UTC).toLocalDate(),
-                        Collectors.counting()
-                ));
+                public List<UserPerformance> getUserPerformance() {
+                        return userPerformance;
+                }
 
-        List<DailyCount> timeline = daily.entrySet().stream()
-                .sorted(Map.Entry.comparingByKey())
-                .map(e -> new DailyCount(e.getKey().toString(), e.getValue()))
-                .toList();
+                public void setUserPerformance(List<UserPerformance> userPerformance) {
+                        this.userPerformance = userPerformance;
+                }
+        }
 
-        // 🔹 Status breakdown
-        Map<LeadStatus, Long> statusCounts = leads.stream()
-                .collect(Collectors.groupingBy(Lead::getStatus, Collectors.counting()));
+        @Data
+        @AllArgsConstructor
+        public static class DailyCount {
+                private String date;
+                private long leads;
+        }
 
-        List<StatusCount> statusBreakdown = statusCounts.entrySet().stream()
-                .map(e -> new StatusCount(e.getKey().name(), e.getValue()))
-                .toList();
+        @Data
+        @AllArgsConstructor
+        public static class StatusCount {
+                private String status;
+                private long count;
+        }
 
-        // 🔹 Kullanıcı performansı
-        Map<UUID, List<Lead>> byUser = leads.stream()
-                .filter(l -> l.getAssignedToUser() != null)
-                .collect(Collectors.groupingBy(l -> l.getAssignedToUser().getId()));
+        @Data
+        @AllArgsConstructor
+        public static class UserPerformance {
+                private String userName;
+                private long sales;
+                private long total;
+        }
 
-        List<UserPerformance> userPerformance = byUser.entrySet().stream()
-                .map(e -> {
-                    User u = userRepository.findById(e.getKey()).orElse(null);
-                    long total = e.getValue().size();
+        public LeadReportResponse getLeadReport(UUID orgId, Instant start, Instant end) {
+                List<Lead> leads = leadRepository.findByOrganizationIdAndCreatedAtBetween(orgId, start, end);
 
-                    // 💡 Yeni satış metriği: SOLD durumundaki leadler
-                    long sales = e.getValue().stream()
-                            .filter(l -> l.getStatus() == LeadStatus.SOLD)
-                            .count();
+                // 🔹 Timeline: günlük lead sayısı
+                Map<LocalDate, Long> daily = leads.stream()
+                                .collect(Collectors.groupingBy(
+                                                l -> l.getCreatedAt().atZone(ZoneOffset.UTC).toLocalDate(),
+                                                Collectors.counting()));
 
-                    String name = u != null
-                            ? u.getFirstName() + " " + (u.getLastName() != null ? u.getLastName() : "")
-                            : "Unknown";
+                List<DailyCount> timeline = daily.entrySet().stream()
+                                .sorted(Map.Entry.comparingByKey())
+                                .map(e -> new DailyCount(e.getKey().toString(), e.getValue()))
+                                .toList();
 
-                    return new UserPerformance(name.trim(), sales, total);
-                })
-                .sorted(Comparator.comparingLong(UserPerformance::getSales).reversed())
-                .toList();
+                // 🔹 Status breakdown
+                Map<LeadStatus, Long> statusCounts = leads.stream()
+                                .collect(Collectors.groupingBy(Lead::getStatus, Collectors.counting()));
 
-        LeadReportResponse res = new LeadReportResponse();
-        res.setTimeline(timeline);
-        res.setStatusBreakdown(statusBreakdown);
-        res.setUserPerformance(userPerformance);
+                List<StatusCount> statusBreakdown = statusCounts.entrySet().stream()
+                                .map(e -> new StatusCount(e.getKey().name(), e.getValue()))
+                                .toList();
 
-        return res;
-    }
+                // 🔹 Kullanıcı performansı
+                Map<UUID, List<Lead>> byUser = leads.stream()
+                                .filter(l -> l.getAssignedToUser() != null)
+                                .collect(Collectors.groupingBy(l -> l.getAssignedToUser().getId()));
+
+                List<UserPerformance> userPerformance = byUser.entrySet().stream()
+                                .map(e -> {
+                                        User u = userRepository.findById(e.getKey()).orElse(null);
+                                        long total = e.getValue().size();
+
+                                        // 💡 Yeni satış metriği: SOLD durumundaki leadler
+                                        long sales = e.getValue().stream()
+                                                        .filter(l -> l.getStatus() == LeadStatus.SOLD)
+                                                        .count();
+
+                                        String name = u != null
+                                                        ? u.getFirstName() + " "
+                                                                        + (u.getLastName() != null ? u.getLastName()
+                                                                                        : "")
+                                                        : "Unknown";
+
+                                        return new UserPerformance(name.trim(), sales, total);
+                                })
+                                .sorted(Comparator.comparingLong(UserPerformance::getSales).reversed())
+                                .toList();
+
+                LeadReportResponse res = new LeadReportResponse();
+                res.setTimeline(timeline);
+                res.setStatusBreakdown(statusBreakdown);
+                res.setUserPerformance(userPerformance);
+
+                return res;
+        }
 }

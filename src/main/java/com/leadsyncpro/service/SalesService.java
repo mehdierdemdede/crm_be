@@ -10,7 +10,7 @@ import com.leadsyncpro.repository.LeadRepository;
 import com.leadsyncpro.repository.SalesRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -20,8 +20,9 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
-@Slf4j
 public class SalesService {
+
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(SalesService.class);
 
     private final LeadRepository leadRepository;
     private final SalesRepository salesRepository;
@@ -74,6 +75,12 @@ public class SalesService {
                 .orElseThrow(() -> new ResourceNotFoundException("Sale not found"));
 
         return mapToSaleResponse(sale);
+    }
+
+    public org.springframework.data.domain.Page<SaleResponse> getAllSales(UUID organizationId,
+            org.springframework.data.domain.Pageable pageable) {
+        return salesRepository.findAllByOrganizationId(organizationId, pageable)
+                .map(this::mapToSaleResponse);
     }
 
     private String writeJson(SaleRequest req) {

@@ -15,6 +15,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.Optional;
 import java.util.EnumSet;
+import java.util.Map;
+import java.time.Instant;
 
 @Service
 public class UserService {
@@ -23,30 +25,35 @@ public class UserService {
     private final PasswordEncoder passwordEncoder;
     private final InviteService inviteService;
     private final OrganizationService organizationService;
-
+    private final com.leadsyncpro.repository.LeadRepository leadRepository;
+    private final com.leadsyncpro.repository.SalesRepository salesRepository;
 
     public UserService(
             UserRepository userRepository,
             PasswordEncoder passwordEncoder,
             InviteService inviteService,
-            OrganizationService organizationService) {
+            OrganizationService organizationService,
+            com.leadsyncpro.repository.LeadRepository leadRepository,
+            com.leadsyncpro.repository.SalesRepository salesRepository) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.inviteService = inviteService;
         this.organizationService = organizationService;
+        this.leadRepository = leadRepository;
+        this.salesRepository = salesRepository;
     }
 
     @Transactional
     public User createUser(UUID organizationId,
-                           String email,
-                           String password,
-                           String firstName,
-                           String lastName,
-                           Role role,
-                           Set<SupportedLanguages> supportedLanguages,
-                           Integer dailyCapacity,
-                           boolean isActive,
-                           boolean autoAssignEnabled) {
+            String email,
+            String password,
+            String firstName,
+            String lastName,
+            Role role,
+            Set<SupportedLanguages> supportedLanguages,
+            Integer dailyCapacity,
+            boolean isActive,
+            boolean autoAssignEnabled) {
         String normalizedEmail = email.toLowerCase();
         if (userRepository.existsByOrganizationIdAndEmail(organizationId, normalizedEmail)) {
             throw new IllegalArgumentException("User with this email already exists in this organization.");
@@ -70,16 +77,28 @@ public class UserService {
         return userRepository.save(user);
     }
 
+    // ... (existing code)
+    public Map<String, Object> getUserStats(UUID userId, UUID organizationId) {
+        Instant today = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.DAYS);
+
+        long leads = leadRepository.countByAssignedToUser_IdAndCreatedAtAfter(userId, today);
+        long sales = salesRepository.countByUserIdAndCreatedAtAfter(userId, today);
+
+        return Map.of(
+                "todayLeadCount", leads,
+                "todaySaleCount", sales);
+    }
+
     @Transactional
     public User updateUser(UUID userId,
-                           UUID organizationId,
-                           String firstName,
-                           String lastName,
-                           Role role,
-                           Boolean isActive,
-                           Set<SupportedLanguages> supportedLanguages,
-                           Integer dailyCapacity,
-                           Boolean autoAssignEnabled) {
+            UUID organizationId,
+            String firstName,
+            String lastName,
+            Role role,
+            Boolean isActive,
+            Set<SupportedLanguages> supportedLanguages,
+            Integer dailyCapacity,
+            Boolean autoAssignEnabled) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + userId));
 
@@ -88,10 +107,14 @@ public class UserService {
             throw new SecurityException("Access denied: User does not belong to this organization.");
         }
 
-        if (firstName != null) user.setFirstName(firstName);
-        if (lastName != null) user.setLastName(lastName);
-        if (role != null) user.setRole(role);
-        if (isActive != null) user.setActive(isActive);
+        if (firstName != null)
+            user.setFirstName(firstName);
+        if (lastName != null)
+            user.setLastName(lastName);
+        if (role != null)
+            user.setRole(role);
+        if (isActive != null)
+            user.setActive(isActive);
         if (supportedLanguages != null) {
             user.setSupportedLanguages(normalizeSupportedLanguages(supportedLanguages));
         }
@@ -143,17 +166,16 @@ public class UserService {
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + id));
     }
 
-
     @Transactional
     public User createAndInviteUser(UUID orgId,
-                                    String email,
-                                    String firstName,
-                                    String lastName,
-                                    Role role,
-                                    Set<SupportedLanguages> supportedLanguages,
-                                    Integer dailyCapacity,
-                                    boolean isActive,
-                                    boolean autoAssignEnabled) {
+            String email,
+            String firstName,
+            String lastName,
+            Role role,
+            Set<SupportedLanguages> supportedLanguages,
+            Integer dailyCapacity,
+            boolean isActive,
+            boolean autoAssignEnabled) {
         String normalizedEmail = email.toLowerCase();
         if (userRepository.existsByOrganizationIdAndEmail(orgId, normalizedEmail)) {
             throw new IllegalArgumentException("User with this email already exists in this organization.");

@@ -32,20 +32,18 @@ public class UserController {
     private final PasswordEncoder passwordEncoder;
 
     public UserController(UserService userService, InviteService inviteService,
-                          UserRepository userRepository, PasswordEncoder passwordEncoder) {
+            UserRepository userRepository, PasswordEncoder passwordEncoder) {
         this.userService = userService;
         this.inviteService = inviteService;
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
     }
 
-
     @PostMapping("/invite")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'SUPER_ADMIN')")
     public ResponseEntity<?> inviteUser(
             @RequestBody @Valid UserCreateRequest req,
-            @AuthenticationPrincipal UserPrincipal principal
-    ) {
+            @AuthenticationPrincipal UserPrincipal principal) {
         UUID orgId = principal.getOrganizationId();
         if (principal.getRole() == Role.SUPER_ADMIN && req.getOrganizationId() != null) {
             orgId = req.getOrganizationId();
@@ -60,8 +58,7 @@ public class UserController {
                 req.getSupportedLanguages(),
                 req.getDailyCapacity(),
                 req.isActive(),
-                req.isAutoAssignEnabled()
-        );
+                req.isAutoAssignEnabled());
         return ResponseEntity.status(HttpStatus.CREATED).body(UserResponse.from(u));
     }
 
@@ -91,5 +88,11 @@ public class UserController {
     public ResponseEntity<User> getCurrentUser(@AuthenticationPrincipal UserPrincipal currentUser) {
         User user = userService.findById(currentUser.getId());
         return ResponseEntity.ok(user);
+    }
+
+    @GetMapping("/me/stats")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<Map<String, Object>> getMyStats(@AuthenticationPrincipal UserPrincipal currentUser) {
+        return ResponseEntity.ok(userService.getUserStats(currentUser.getId(), currentUser.getOrganizationId()));
     }
 }
