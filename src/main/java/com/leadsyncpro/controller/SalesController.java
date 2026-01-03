@@ -23,9 +23,14 @@ public class SalesController {
 
     @GetMapping
     @PreAuthorize("hasAnyAuthority('ADMIN','USER','SUPER_ADMIN')")
-    public ResponseEntity<org.springframework.data.domain.Page<SaleResponse>> getAllSales(
+    public ResponseEntity<?> getAllSales(
             @AuthenticationPrincipal UserPrincipal currentUser,
+            @RequestParam(required = false) UUID leadId,
             org.springframework.data.domain.Pageable pageable) {
+
+        if (leadId != null) {
+            return ResponseEntity.ok(salesService.getSalesByLead(leadId, currentUser.getOrganizationId()));
+        }
 
         return ResponseEntity.ok(salesService.getAllSales(currentUser.getOrganizationId(), pageable));
     }

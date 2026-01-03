@@ -93,6 +93,13 @@ public class SalesService {
                 .map(this::mapToSaleResponse);
     }
 
+    public java.util.List<SaleResponse> getSalesByLead(UUID leadId, UUID organizationId) {
+        return salesRepository.findAllByLead_IdAndOrganizationIdOrderByOperationDateDesc(leadId, organizationId)
+                .stream()
+                .map(this::mapToSaleResponse)
+                .toList();
+    }
+
     private String writeJson(SaleRequest req) {
         try {
             return objectMapper.writeValueAsString(req.getTransfer());

@@ -383,7 +383,7 @@ public class LeadService {
                 .nights(sale.getNights())
                 .transfer(transferList)
                 .documentPath(sale.getDocumentPath())
-                .operationDate(sale.getCreatedAt()) // Using createdAt as operation date for now
+                .operationDate(sale.getOperationDate()) // Correctly usage of operationDate
                 .createdAt(sale.getCreatedAt())
                 .build();
     }
