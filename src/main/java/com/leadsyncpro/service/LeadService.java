@@ -208,8 +208,22 @@ public class LeadService {
             String campaignId,
             UUID assignedUserId,
             Boolean unassigned,
+            String startDate,
+            String endDate,
             Pageable pageable) {
         Specification<Lead> specification = LeadSpecifications.belongsToOrganization(organizationId);
+
+        if (startDate != null || endDate != null) {
+            Instant start = parseOrDefault(startDate, null);
+            Instant end = parseOrDefault(endDate, null);
+
+            // Eğer endDate sadece tarih ise (YYYY-MM-DD), günün sonuna çek
+            if (end != null && endDate != null && endDate.length() <= 10) {
+                end = end.plus(1, ChronoUnit.DAYS).minus(1, ChronoUnit.SECONDS);
+            }
+
+            specification = specification.and(LeadSpecifications.createdBetween(start, end));
+        }
 
         if (search != null && !search.isBlank()) {
             specification = specification.and(LeadSpecifications.matchesSearch(search));
@@ -411,6 +425,21 @@ public class LeadService {
         lead.setUpdatedAt(Instant.now());
         Lead updated = leadRepository.save(lead);
 
+        if (user != null) {
+            try {
+                mailService.sendLeadAssignedEmail(
+                        user.getEmail(),
+                        user.getFirstName(),
+                        updated.getName(),
+                        updated.getCampaign() != null ? updated.getCampaign().getName() : null,
+                        updated.getLanguage(),
+                        updated.getStatus().name(),
+                        updated.getId().toString());
+            } catch (Exception e) {
+                logger.warn("Lead atama bildirimi gönderilemedi: {}", e.getMessage());
+            }
+        }
+
         logger.info("Lead {} kullanıcıya atandı: {}", leadId, (user != null ? user.getEmail() : "unassigned"));
         return updated;
     }
@@ -488,14 +517,20 @@ public class LeadService {
                 wrongLeads.size());
     }
 
-    // Yardımcı: ISO Instant parse (null-safe)
+    // Yardımcı: ISO Instant parse (null-safe) + YYYY-MM-DD desteği
     private Instant parseOrDefault(String iso, Instant def) {
         if (iso == null || iso.isBlank())
             return def;
         try {
+            // Tam ISO-8601 (2023-10-05T10:00:00Z)
             return Instant.parse(iso);
         } catch (Exception e) {
-            return def;
+            try {
+                // Sadece tarih (2023-10-05) -> UTC başlangıcı kabul et
+                return java.time.LocalDate.parse(iso).atStartOfDay(java.time.ZoneId.of("UTC")).toInstant();
+            } catch (Exception ex) {
+                return def;
+            }
         }
     }
 

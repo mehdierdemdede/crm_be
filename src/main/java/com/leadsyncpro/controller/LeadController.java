@@ -25,6 +25,7 @@ public class LeadController {
 
     private final LeadService leadService;
     private final LeadActionService leadActionService;
+
     public LeadController(
             LeadService leadService,
             LeadActionService leadActionService) {
@@ -46,6 +47,8 @@ public class LeadController {
             @RequestParam(required = false) String campaignId,
             @RequestParam(required = false) UUID assignedUserId,
             @RequestParam(required = false) Boolean unassigned,
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate,
             Pageable pageable // ✅ pagination + sorting otomatik
     ) {
         Page<Lead> leads = leadService.getLeadsByOrganizationPaged(
@@ -56,6 +59,8 @@ public class LeadController {
                 campaignId,
                 assignedUserId,
                 unassigned,
+                startDate,
+                endDate,
                 pageable);
         return ResponseEntity.ok(leads);
     }
@@ -63,7 +68,7 @@ public class LeadController {
     @PostMapping
     @PreAuthorize("hasAnyAuthority('ADMIN', 'USER', 'SUPER_ADMIN')")
     public ResponseEntity<Lead> createLead(@Valid @RequestBody LeadCreateRequest request,
-                                           @AuthenticationPrincipal UserPrincipal currentUser) {
+            @AuthenticationPrincipal UserPrincipal currentUser) {
         Lead newLead = leadService.createLead(currentUser.getOrganizationId(), request);
         return ResponseEntity.status(HttpStatus.CREATED).body(newLead);
     }
@@ -71,15 +76,15 @@ public class LeadController {
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'USER', 'SUPER_ADMIN')")
     public ResponseEntity<LeadResponse> getLeadById(@PathVariable UUID id,
-                                                    @AuthenticationPrincipal UserPrincipal currentUser) {
+            @AuthenticationPrincipal UserPrincipal currentUser) {
         return ResponseEntity.ok(leadService.getLeadById(id, currentUser.getOrganizationId()));
     }
 
     @PutMapping("/{id}")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'USER', 'SUPER_ADMIN')")
     public ResponseEntity<Lead> updateLead(@PathVariable UUID id,
-                                           @Valid @RequestBody LeadUpdateRequest request,
-                                           @AuthenticationPrincipal UserPrincipal currentUser) {
+            @Valid @RequestBody LeadUpdateRequest request,
+            @AuthenticationPrincipal UserPrincipal currentUser) {
         Lead updated = leadService.updateLead(id, currentUser.getOrganizationId(), request);
         return ResponseEntity.ok(updated);
     }
@@ -87,7 +92,7 @@ public class LeadController {
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'SUPER_ADMIN')")
     public ResponseEntity<Void> deleteLead(@PathVariable UUID id,
-                                           @AuthenticationPrincipal UserPrincipal currentUser) {
+            @AuthenticationPrincipal UserPrincipal currentUser) {
         leadService.deleteLead(id, currentUser.getOrganizationId());
         return ResponseEntity.noContent().build();
     }
@@ -99,9 +104,9 @@ public class LeadController {
     @PatchMapping("/{id}/status")
     @PreAuthorize("hasAnyAuthority('USER', 'ADMIN', 'SUPER_ADMIN')")
     public ResponseEntity<LeadResponse> updateLeadStatus(@PathVariable UUID id,
-                                                         @RequestParam(value = "status", required = false) String statusParam,
-                                                         @RequestBody(required = false) LeadStatusUpdateRequest request,
-                                                         @AuthenticationPrincipal UserPrincipal currentUser) {
+            @RequestParam(value = "status", required = false) String statusParam,
+            @RequestBody(required = false) LeadStatusUpdateRequest request,
+            @AuthenticationPrincipal UserPrincipal currentUser) {
         String requestedStatus = null;
         if (request != null && request.getStatus() != null && !request.getStatus().isBlank()) {
             requestedStatus = request.getStatus();
@@ -114,15 +119,16 @@ public class LeadController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Lead status is required");
         }
 
-        LeadResponse updated = leadService.updateLeadStatus(id, requestedStatus, currentUser.getId(), currentUser.getOrganizationId());
+        LeadResponse updated = leadService.updateLeadStatus(id, requestedStatus, currentUser.getId(),
+                currentUser.getOrganizationId());
         return ResponseEntity.ok(updated);
     }
 
     @PostMapping("/{leadId}/actions")
     @PreAuthorize("hasAnyAuthority('USER','ADMIN','SUPER_ADMIN')")
     public ResponseEntity<LeadActionResponse> addLeadAction(@PathVariable UUID leadId,
-                                                            @Valid @RequestBody LeadActionRequest req,
-                                                            @AuthenticationPrincipal UserPrincipal currentUser) {
+            @Valid @RequestBody LeadActionRequest req,
+            @AuthenticationPrincipal UserPrincipal currentUser) {
         LeadActionResponse created = leadActionService.createActionForLead(
                 leadId, currentUser.getOrganizationId(), currentUser.getId(), req);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
@@ -131,10 +137,11 @@ public class LeadController {
     @GetMapping("/{leadId}/actions")
     @PreAuthorize("hasAnyAuthority('USER','ADMIN','SUPER_ADMIN')")
     public ResponseEntity<List<LeadActionResponse>> getLeadActions(@PathVariable UUID leadId,
-                                                                   @AuthenticationPrincipal UserPrincipal currentUser) {
+            @AuthenticationPrincipal UserPrincipal currentUser) {
         List<LeadActionResponse> actions = leadActionService.getActionsForLead(
                 leadId, currentUser.getOrganizationId());
-        if (actions.isEmpty()) return ResponseEntity.noContent().build();
+        if (actions.isEmpty())
+            return ResponseEntity.noContent().build();
         return ResponseEntity.ok(actions);
     }
 
@@ -143,8 +150,7 @@ public class LeadController {
     public ResponseEntity<Lead> assignLead(
             @PathVariable UUID id,
             @RequestParam(value = "userId", required = false) String userIdParam,
-            @AuthenticationPrincipal UserPrincipal currentUser
-    ) {
+            @AuthenticationPrincipal UserPrincipal currentUser) {
         UUID userId = null;
         if (StringUtils.hasText(userIdParam)) {
             userId = UUID.fromString(userIdParam);
@@ -153,6 +159,5 @@ public class LeadController {
         Lead updated = leadService.assignLead(id, userId, currentUser.getOrganizationId());
         return ResponseEntity.ok(updated);
     }
-
 
 }

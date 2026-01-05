@@ -33,8 +33,7 @@ public final class LeadSpecifications {
             return cb.or(
                     cb.like(cb.lower(root.get("name")), pattern),
                     cb.like(cb.lower(root.get("email")), pattern),
-                    cb.like(cb.lower(campaignJoin.get("name")), pattern)
-            );
+                    cb.like(cb.lower(campaignJoin.get("name")), pattern));
         };
     }
 
@@ -79,5 +78,17 @@ public final class LeadSpecifications {
     public static Specification<Lead> isUnassigned() {
         return (root, query, cb) -> cb.isNull(root.get("assignedToUser"));
     }
-}
 
+    public static Specification<Lead> createdBetween(java.time.Instant start, java.time.Instant end) {
+        return (root, query, cb) -> {
+            if (start != null && end != null) {
+                return cb.between(root.get("createdAt"), start, end);
+            } else if (start != null) {
+                return cb.greaterThanOrEqualTo(root.get("createdAt"), start);
+            } else if (end != null) {
+                return cb.lessThanOrEqualTo(root.get("createdAt"), end);
+            }
+            return null;
+        };
+    }
+}
