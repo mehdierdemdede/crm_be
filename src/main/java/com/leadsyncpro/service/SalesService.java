@@ -100,6 +100,15 @@ public class SalesService {
                 .toList();
     }
 
+    public java.util.List<SaleResponse> getSalesByDateRange(UUID organizationId, Instant startDate, Instant endDate) {
+        return salesRepository
+                .findAllByOrganizationIdAndOperationDateBetweenOrderByOperationDateAsc(organizationId, startDate,
+                        endDate)
+                .stream()
+                .map(this::mapToSaleResponse)
+                .toList();
+    }
+
     private String writeJson(SaleRequest req) {
         try {
             return objectMapper.writeValueAsString(req.getTransfer());

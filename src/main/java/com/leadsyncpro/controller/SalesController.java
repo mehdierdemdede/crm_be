@@ -26,10 +26,18 @@ public class SalesController {
     public ResponseEntity<?> getAllSales(
             @AuthenticationPrincipal UserPrincipal currentUser,
             @RequestParam(required = false) UUID leadId,
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate,
             org.springframework.data.domain.Pageable pageable) {
 
         if (leadId != null) {
             return ResponseEntity.ok(salesService.getSalesByLead(leadId, currentUser.getOrganizationId()));
+        }
+
+        if (startDate != null && endDate != null) {
+            java.time.Instant start = java.time.Instant.parse(startDate);
+            java.time.Instant end = java.time.Instant.parse(endDate);
+            return ResponseEntity.ok(salesService.getSalesByDateRange(currentUser.getOrganizationId(), start, end));
         }
 
         return ResponseEntity.ok(salesService.getAllSales(currentUser.getOrganizationId(), pageable));

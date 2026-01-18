@@ -17,4 +17,7 @@ public interface SalesRepository extends JpaRepository<Sale, UUID> {
     long countByUserIdAndCreatedAtAfter(UUID userId, java.time.Instant createdAt);
 
     java.util.List<Sale> findAllByLead_IdAndOrganizationIdOrderByOperationDateDesc(UUID leadId, UUID organizationId);
+
+    java.util.List<Sale> findAllByOrganizationIdAndOperationDateBetweenOrderByOperationDateAsc(UUID organizationId,
+            java.time.Instant startDate, java.time.Instant endDate);
 }
