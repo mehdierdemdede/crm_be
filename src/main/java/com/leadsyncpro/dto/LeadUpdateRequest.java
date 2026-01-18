@@ -13,6 +13,7 @@ public class LeadUpdateRequest {
     private String email;
     private String language;
     private String notes;
+    private String adName; // 🔹 Reklam adı (Editable)
     private UUID campaignId;
     private boolean clearCampaign; // To explicitly clear campaign association
     private String status; // Will be converted to LeadStatus enum
