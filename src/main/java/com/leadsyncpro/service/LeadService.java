@@ -129,6 +129,10 @@ public class LeadService {
         if (request.getNotes() != null)
             lead.setNotes(request.getNotes());
 
+        if (request.getAdName() != null) {
+            lead.setAdName(request.getAdName());
+        }
+
         if (request.getStatus() != null) {
             lead.setStatus(LeadStatus.valueOf(request.getStatus().toUpperCase()));
         }
