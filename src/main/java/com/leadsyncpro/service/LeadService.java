@@ -130,7 +130,21 @@ public class LeadService {
             lead.setNotes(request.getNotes());
 
         if (request.getAdName() != null) {
-            lead.setAdName(request.getAdName());
+            String newAdName = request.getAdName();
+            lead.setAdName(newAdName);
+
+            // 🔹 Bulk Update: Aynı Ad ID'ye sahip diğer lead'lerin de ismini güncelle
+            if (lead.getAdId() != null && !lead.getAdId().isBlank()) {
+                List<Lead> relatedLeads = leadRepository.findAllByOrganizationIdAndAdId(organizationId, lead.getAdId());
+                if (!relatedLeads.isEmpty()) {
+                    for (Lead related : relatedLeads) {
+                        if (!related.getId().equals(lead.getId())) { // Kendisini zaten güncelledik
+                            related.setAdName(newAdName);
+                        }
+                    }
+                    leadRepository.saveAll(relatedLeads);
+                }
+            }
         }
 
         if (request.getStatus() != null) {
