@@ -37,7 +37,7 @@ public class IntegrationController {
     }
 
     @GetMapping("/oauth2/authorize/{registrationId}")
-    @PreAuthorize("hasAuthority('SUPER_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'SUPER_ADMIN')")
     public ResponseEntity<String> authorizeIntegration(@PathVariable("registrationId") String registrationId,
             @AuthenticationPrincipal UserPrincipal currentUser,
             HttpServletRequest request,

@@ -32,7 +32,6 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 
-
 @Service
 public class IntegrationService {
 
@@ -48,25 +47,40 @@ public class IntegrationService {
     private final ObjectMapper objectMapper;
     private final AutoAssignService autoAssignService;
 
-
     @Value("${app.encryption.key}")
     private String encryptionKey;
 
     @Value("${app.backend.base-url}")
     private String backendBaseUrl;
 
-    private static String asString(Object o) { return o == null ? null : o.toString(); }
-    private static String safe(String s) { return s == null ? "" : s; }
-    private static boolean isBlank(String s) { return s == null || s.trim().isEmpty(); }
+    private static String asString(Object o) {
+        return o == null ? null : o.toString();
+    }
+
+    private static String safe(String s) {
+        return s == null ? "" : s;
+    }
+
+    private static boolean isBlank(String s) {
+        return s == null || s.trim().isEmpty();
+    }
 
     private static Instant parseInstant(String iso) {
-        try { return iso != null ? Instant.parse(iso) : null; } catch (Exception e) { return null; }
+        try {
+            return iso != null ? Instant.parse(iso) : null;
+        } catch (Exception e) {
+            return null;
+        }
     }
+
     private static Boolean asBoolean(Object o) {
-        if (o instanceof Boolean) return (Boolean) o;
-        if (o instanceof String) return "true".equalsIgnoreCase((String) o);
+        if (o instanceof Boolean)
+            return (Boolean) o;
+        if (o instanceof String)
+            return "true".equalsIgnoreCase((String) o);
         return null;
     }
+
     private static String firstValue(Object values) {
         if (values instanceof List && !((List<?>) values).isEmpty()) {
             Object v0 = ((List<?>) values).get(0);
@@ -226,9 +240,11 @@ public class IntegrationService {
 
     @SuppressWarnings("unchecked")
     private static String nextUrl(Map body) {
-        if (body == null) return null;
-        Map<String,Object> paging = (Map<String,Object>) body.get("paging");
-        if (paging == null) return null;
+        if (body == null)
+            return null;
+        Map<String, Object> paging = (Map<String, Object>) body.get("paging");
+        if (paging == null)
+            return null;
         return (String) paging.get("next");
     }
 
@@ -237,18 +253,17 @@ public class IntegrationService {
             .withPreloadedLanguageModels()
             .build();
 
-
     public static String detectLanguageFromText(String text) {
-        if (text == null || text.isBlank()) return null;
+        if (text == null || text.isBlank())
+            return null;
         Language lang = detector.detectLanguageOf(text);
         return lang != null ? lang.getIsoCode639_1().name() : null; // örn: "EN"
     }
 
-
     private void updateConnectionStatus(IntegrationConfig config,
-                                        IntegrationConnectionStatus status,
-                                        String statusMessage,
-                                        String errorMessage) {
+            IntegrationConnectionStatus status,
+            String statusMessage,
+            String errorMessage) {
         if (config == null) {
             return;
         }
@@ -291,13 +306,12 @@ public class IntegrationService {
                 || status == IntegrationConnectionStatus.DISCONNECTED;
     }
 
-
     public IntegrationService(IntegrationConfigRepository integrationConfigRepository,
-                              EncryptionService encryptionService,
-                              ClientRegistrationRepository clientRegistrationRepository,
-                              LeadRepository leadRepository,
-                              CampaignRepository campaignRepository,
-                              IntegrationLogRepository integrationLogRepository, AutoAssignService autoAssignService) {
+            EncryptionService encryptionService,
+            ClientRegistrationRepository clientRegistrationRepository,
+            LeadRepository leadRepository,
+            CampaignRepository campaignRepository,
+            IntegrationLogRepository integrationLogRepository, AutoAssignService autoAssignService) {
         this.integrationConfigRepository = integrationConfigRepository;
         this.encryptionService = encryptionService;
         this.clientRegistrationRepository = clientRegistrationRepository;
@@ -309,11 +323,10 @@ public class IntegrationService {
         this.integrationLogRepository = integrationLogRepository;
     }
 
-
     @Transactional
     public IntegrationConfig saveIntegrationConfig(UUID organizationId, IntegrationPlatform platform,
-                                                   String accessToken, String refreshToken, Instant expiresAt,
-                                                   String scope, String clientId, String clientSecret, UUID createdBy) {
+            String accessToken, String refreshToken, Instant expiresAt,
+            String scope, String clientId, String clientSecret, UUID createdBy) {
         // Hassas verileri kaydetmeden önce şifrele
         String encryptedAccessToken = encryptionService.encrypt(accessToken);
         String encryptedRefreshToken = refreshToken != null ? encryptionService.encrypt(refreshToken) : null;
@@ -331,7 +344,8 @@ public class IntegrationService {
         config.setClientId(clientId);
         config.setClientSecret(encryptedClientSecret);
         config.setCreatedBy(createdBy);
-        // platformPageId burada ayarlanacak, ancak handleOAuth2Callback'de belirlenecek.
+        // platformPageId burada ayarlanacak, ancak handleOAuth2Callback'de
+        // belirlenecek.
         // Eğer bu metod doğrudan çağrılıyorsa ve pageId yoksa, null kalır.
         updateConnectionStatus(config, IntegrationConnectionStatus.CONNECTED,
                 "OAuth yapılandırması manuel olarak kaydedildi.", null);
@@ -385,9 +399,9 @@ public class IntegrationService {
      * Frontend'in kullanıcıyı yönlendirmesi gereken yetkilendirme URL'ini döndürür.
      */
     public String getAuthorizationUrl(String registrationId,
-                                      UUID organizationId,
-                                      UUID userId,
-                                      String requestBaseUrl) {
+            UUID organizationId,
+            UUID userId,
+            String requestBaseUrl) {
         ClientRegistration clientRegistration = clientRegistrationRepository.findByRegistrationId(registrationId);
         if (clientRegistration == null) {
             throw new IllegalArgumentException("Geçersiz istemci kayıt ID'si: " + registrationId);
@@ -413,8 +427,7 @@ public class IntegrationService {
                     "openid",
                     "email",
                     "profile",
-                    "https://www.googleapis.com/auth/adwords"
-            );
+                    "https://www.googleapis.com/auth/adwords");
         } else if (platform == IntegrationPlatform.FACEBOOK) {
             // Facebook için sayfa lead'leri için gereken izinler
             scopes = Arrays.asList(
@@ -422,8 +435,7 @@ public class IntegrationService {
                     "public_profile",
                     "pages_show_list",
                     "pages_read_engagement",
-                    "leads_retrieval"
-            );
+                    "leads_retrieval");
         } else {
             throw new IllegalArgumentException("Desteklenmeyen platform: " + platform);
         }
@@ -442,7 +454,8 @@ public class IntegrationService {
     }
 
     /**
-     * OAuth2 callback'ini işler, kodları token'larla değiştirir ve yapılandırmayı kaydeder.
+     * OAuth2 callback'ini işler, kodları token'larla değiştirir ve yapılandırmayı
+     * kaydeder.
      * Bu metod, callback endpoint'iniz tarafından çağrılır.
      */
     @Transactional
@@ -485,8 +498,7 @@ public class IntegrationService {
                     clientRegistration.getProviderDetails().getTokenUri(),
                     HttpMethod.POST,
                     request,
-                    Map.class
-            );
+                    Map.class);
 
             Map<String, Object> tokenResponse = response.getBody();
             if (tokenResponse == null || !tokenResponse.containsKey("access_token")) {
@@ -501,9 +513,13 @@ public class IntegrationService {
             if (expiresInObj instanceof Number) {
                 expiresInSeconds = ((Number) expiresInObj).longValue();
             } else if (expiresInObj instanceof String) {
-                try { expiresInSeconds = Long.parseLong((String) expiresInObj); } catch (NumberFormatException ignored) {}
+                try {
+                    expiresInSeconds = Long.parseLong((String) expiresInObj);
+                } catch (NumberFormatException ignored) {
+                }
             }
-            Instant expiresAt = (expiresInSeconds != null) ? Instant.now().plus(expiresInSeconds, ChronoUnit.SECONDS) : null;
+            Instant expiresAt = (expiresInSeconds != null) ? Instant.now().plus(expiresInSeconds, ChronoUnit.SECONDS)
+                    : null;
             String scope = (String) tokenResponse.get("scope");
 
             config.setOrganizationId(organizationId);
@@ -522,30 +538,46 @@ public class IntegrationService {
                     String pagesApiUrl = "https://graph.facebook.com/v18.0/me/accounts"
                             + "?fields=id,name,access_token&access_token=" + accessToken;
 
-                    ResponseEntity<Map> pagesResponse = restTemplate.exchange(pagesApiUrl, HttpMethod.GET, null, Map.class);
-                    List<Map<String, Object>> pagesData = (List<Map<String, Object>>) pagesResponse.getBody().get("data");
+                    ResponseEntity<Map> pagesResponse = restTemplate.exchange(pagesApiUrl, HttpMethod.GET, null,
+                            Map.class);
+                    List<Map<String, Object>> pagesData = (List<Map<String, Object>>) pagesResponse.getBody()
+                            .get("data");
 
                     String selectedPageId = null;
                     if (pagesData != null) {
                         for (Map<String, Object> pageMap : pagesData) {
                             String pageId = (String) pageMap.get("id");
+                            String pageName = (String) pageMap.get("name");
                             String pageAccessToken = (String) pageMap.get("access_token");
-                            if (pageId == null || pageAccessToken == null) continue;
+
+                            if (pageId == null || pageAccessToken == null)
+                                continue;
+
+                            logger.info("Facebook sayfası bulundu: {} ({})", pageName, pageId);
+
+                            // Eğer henüz bir sayfa seçilmediyse, ilk bulunanı varsayılan yap
+                            if (selectedPageId == null) {
+                                selectedPageId = pageId;
+                            }
 
                             // Bu sayfanın en az bir lead formu var mı?
                             String testFormsUrl = "https://graph.facebook.com/v18.0/" + pageId
                                     + "/leadgen_forms?limit=1&access_token=" + pageAccessToken;
 
                             try {
-                                ResponseEntity<Map> formsResp = restTemplate.exchange(testFormsUrl, HttpMethod.GET, null, Map.class);
-                                List<Map<String, Object>> fdata = (List<Map<String, Object>>) formsResp.getBody().get("data");
+                                ResponseEntity<Map> formsResp = restTemplate.exchange(testFormsUrl, HttpMethod.GET,
+                                        null, Map.class);
+                                List<Map<String, Object>> fdata = (List<Map<String, Object>>) formsResp.getBody()
+                                        .get("data");
                                 if (fdata != null && !fdata.isEmpty()) {
                                     selectedPageId = pageId;
-                                    logger.info("Lead formu olan Facebook sayfası bulundu: {} ({})", pageMap.get("name"), pageId);
+                                    logger.info("Lead formu olan öncelikli Facebook sayfası seçildi: {} ({})", pageName,
+                                            pageId);
                                     break;
                                 }
                             } catch (Exception inner) {
-                                logger.debug("Sayfa {} form kontrolünde hata/erişim yok: {}", pageId, inner.getMessage());
+                                logger.debug("Sayfa {} form kontrolünde hata/erişim yok: {}", pageId,
+                                        inner.getMessage());
                             }
                         }
                     }
@@ -553,7 +585,8 @@ public class IntegrationService {
                     if (selectedPageId != null) {
                         config.setPlatformPageId(selectedPageId);
                     } else {
-                        logger.warn("Organizasyon {} için lead formu olan bir Facebook sayfası bulunamadı.", organizationId);
+                        logger.warn("Organizasyon {} için lead formu olan bir Facebook sayfası bulunamadı.",
+                                organizationId);
                     }
                 } catch (Exception e) {
                     logger.error("Facebook sayfaları çekilirken hata: {}", e.getMessage());
@@ -563,7 +596,8 @@ public class IntegrationService {
             updateConnectionStatus(config, IntegrationConnectionStatus.CONNECTED,
                     "OAuth bağlantısı başarıyla tamamlandı.", null);
             integrationConfigRepository.save(config);
-            logger.info("OAuth2 entegrasyonu organizasyon {} için platform {} ile başarıyla tamamlandı.", organizationId, registrationId);
+            logger.info("OAuth2 entegrasyonu organizasyon {} için platform {} ile başarıyla tamamlandı.",
+                    organizationId, registrationId);
         } catch (Exception e) {
             if (existingConfig != null) {
                 updateConnectionStatus(existingConfig, IntegrationConnectionStatus.ERROR,
@@ -575,21 +609,26 @@ public class IntegrationService {
     }
 
     /**
-     * Süresi dolmuş token'ları yenilemek ve aktif entegrasyonlara sahip tüm organizasyonlar için lead'leri çekmek için zamanlanmış görev.
-     * Bu basit bir örnektir; gerçek bir uygulamada bunu daha sağlam bir şekilde yönetirsiniz (örn. organizasyon başına zamanlama).
+     * Süresi dolmuş token'ları yenilemek ve aktif entegrasyonlara sahip tüm
+     * organizasyonlar için lead'leri çekmek için zamanlanmış görev.
+     * Bu basit bir örnektir; gerçek bir uygulamada bunu daha sağlam bir şekilde
+     * yönetirsiniz (örn. organizasyon başına zamanlama).
      */
 
     @Transactional
     public String refreshAccessToken(UUID organizationId, IntegrationPlatform platform) {
         IntegrationConfig config = integrationConfigRepository.findByOrganizationIdAndPlatform(organizationId, platform)
-                .orElseThrow(() -> new ResourceNotFoundException("Organizasyon " + organizationId + " ve platform " + platform + " için entegrasyon yapılandırması bulunamadı."));
+                .orElseThrow(() -> new ResourceNotFoundException("Organizasyon " + organizationId + " ve platform "
+                        + platform + " için entegrasyon yapılandırması bulunamadı."));
         try {
             String decryptedRefreshToken = encryptionService.decrypt(config.getRefreshToken());
             String decryptedClientSecret = encryptionService.decrypt(config.getClientSecret());
 
-            ClientRegistration clientRegistration = clientRegistrationRepository.findByRegistrationId(platform.name().toLowerCase());
+            ClientRegistration clientRegistration = clientRegistrationRepository
+                    .findByRegistrationId(platform.name().toLowerCase());
             if (clientRegistration == null) {
-                throw new IllegalArgumentException("Platform: " + platform.name() + " için geçersiz istemci kayıt ID'si.");
+                throw new IllegalArgumentException(
+                        "Platform: " + platform.name() + " için geçersiz istemci kayıt ID'si.");
             }
 
             MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
@@ -606,8 +645,7 @@ public class IntegrationService {
                     clientRegistration.getProviderDetails().getTokenUri(),
                     HttpMethod.POST,
                     request,
-                    Map.class
-            );
+                    Map.class);
 
             Map<String, Object> tokenResponse = response.getBody();
             if (tokenResponse == null || !tokenResponse.containsKey("access_token")) {
@@ -636,10 +674,10 @@ public class IntegrationService {
         }
     }
 
-
     /**
      * Google Lead Ads API'den lead'leri çeker.
-     * Bu metod, Google Ads API istemci kütüphanesiyle tam olarak implemente edilmelidir.
+     * Bu metod, Google Ads API istemci kütüphanesiyle tam olarak implemente
+     * edilmelidir.
      */
     @Transactional
     public LeadSyncResult fetchGoogleLeads(UUID organizationId) {
@@ -657,8 +695,9 @@ public class IntegrationService {
         try {
             logger.info("Organizasyon {} için Google Lead'leri çekilmeye çalışılıyor.", organizationId);
             config = integrationConfigRepository.findByOrganizationIdAndPlatform(
-                            organizationId, IntegrationPlatform.GOOGLE)
-                    .orElseThrow(() -> new ResourceNotFoundException("Google entegrasyonu bu organizasyon için yapılandırılmadı."));
+                    organizationId, IntegrationPlatform.GOOGLE)
+                    .orElseThrow(() -> new ResourceNotFoundException(
+                            "Google entegrasyonu bu organizasyon için yapılandırılmadı."));
 
             String accessToken = encryptionService.decrypt(config.getAccessToken());
             if (accessToken == null) {
@@ -701,7 +740,8 @@ public class IntegrationService {
 
             for (Map<String, Object> row : rows) {
                 Map leadForm = (Map) row.get("leadFormSubmissionData");
-                if (leadForm == null) continue;
+                if (leadForm == null)
+                    continue;
 
                 String resourceName = asString(leadForm.get("resourceName"));
                 String campaign = asString(leadForm.get("campaign"));
@@ -733,10 +773,18 @@ public class IntegrationService {
                     String fieldValue = asString(f.get("fieldValue"));
                     if (fieldName != null && fieldValue != null) {
                         switch (fieldName.toLowerCase()) {
-                            case "full_name": case "name": lead.setName(fieldValue); break;
-                            case "email": lead.setEmail(fieldValue); break;
-                            case "phone_number": lead.setPhone(fieldValue); break;
-                            default: extraFields.put(fieldName, fieldValue);
+                            case "full_name":
+                            case "name":
+                                lead.setName(fieldValue);
+                                break;
+                            case "email":
+                                lead.setEmail(fieldValue);
+                                break;
+                            case "phone_number":
+                                lead.setPhone(fieldValue);
+                                break;
+                            default:
+                                extraFields.put(fieldName, fieldValue);
                         }
                     }
                 }
@@ -744,7 +792,8 @@ public class IntegrationService {
                 if (!extraFields.isEmpty()) {
                     try {
                         lead.setExtraFieldsJson(objectMapper.writeValueAsString(extraFields));
-                    } catch (Exception ignored) {}
+                    } catch (Exception ignored) {
+                    }
                 }
 
                 lead.setNotes("Google Lead Form'dan geldi: " + campaign);
@@ -762,7 +811,8 @@ public class IntegrationService {
                 config.setLastSyncedAt(Instant.now());
                 updateConnectionStatus(config, IntegrationConnectionStatus.CONNECTED,
                         String.format("Google lead senkronizasyonu tamamlandı (yeni: %d, güncellenen: %d)",
-                                createdCount, updatedCount), null);
+                                createdCount, updatedCount),
+                        null);
                 integrationConfigRepository.save(config);
             }
 
@@ -784,7 +834,6 @@ public class IntegrationService {
 
         return new LeadSyncResult(result.size(), createdCount, updatedCount);
     }
-
 
     /**
      * Facebook Lead Ads API'den lead'leri çeker.
@@ -814,7 +863,8 @@ public class IntegrationService {
             }
 
             String userAccessToken = encryptionService.decrypt(config.getAccessToken());
-            if (userAccessToken == null) throw new SecurityException("User access token çözülemedi.");
+            if (userAccessToken == null)
+                throw new SecurityException("User access token çözülemedi.");
 
             Instant lastSyncedLeadCreatedAt = config.getLastLeadCreatedTime();
             Instant latestFetchedLeadCreatedAt = lastSyncedLeadCreatedAt;
@@ -825,8 +875,7 @@ public class IntegrationService {
             try {
                 Map pageResp = restTemplate.getForObject(
                         "https://graph.facebook.com/v18.0/{pageId}?fields=access_token&access_token={uat}",
-                        Map.class, pageId, userAccessToken
-                );
+                        Map.class, pageId, userAccessToken);
                 if (pageResp != null) {
                     String freshToken = (String) pageResp.get("access_token");
                     if (freshToken != null && !freshToken.isBlank()) {
@@ -850,14 +899,13 @@ public class IntegrationService {
             final String LEAD_FIELDS = String.join(",",
                     "id",
                     "created_time",
-                    "ad_id","ad_name",
-                    "adset_id","adset_name",
-                    "campaign_id","campaign_name",
+                    "ad_id", "ad_name",
+                    "adset_id", "adset_name",
+                    "campaign_id", "campaign_name",
                     "form_id",
                     "is_organic",
                     "field_data",
-                    "custom_disclaimer_responses"
-            );
+                    "custom_disclaimer_responses");
 
             // 1) Formlar
             String formsUrl = "https://graph.facebook.com/v18.0/" + pageId
@@ -866,30 +914,36 @@ public class IntegrationService {
             while (formsUrl != null) {
                 ResponseEntity<Map> formsResponse = restTemplate.exchange(formsUrl, HttpMethod.GET, null, Map.class);
                 Map body = formsResponse.getBody();
-                List<Map<String,Object>> forms = body != null ? (List<Map<String,Object>>) body.get("data") : null;
+                List<Map<String, Object>> forms = body != null ? (List<Map<String, Object>>) body.get("data") : null;
 
                 if (forms != null) {
-                    for (Map<String,Object> form : forms) {
+                    for (Map<String, Object> form : forms) {
                         String formId = (String) form.get("id");
                         String formName = (String) form.get("name");
-                        if (formId == null) continue;
+                        if (formId == null)
+                            continue;
 
                         // 2) Lead’ler (sayfalama)
                         String leadsUrl = "https://graph.facebook.com/v18.0/" + formId
                                 + "/leads?fields=" + LEAD_FIELDS + "&limit=100&access_token=" + pageAccessToken;
 
                         while (leadsUrl != null) {
-                            ResponseEntity<Map> leadsResp = restTemplate.exchange(leadsUrl, HttpMethod.GET, null, Map.class);
+                            ResponseEntity<Map> leadsResp = restTemplate.exchange(leadsUrl, HttpMethod.GET, null,
+                                    Map.class);
                             Map lbody = leadsResp.getBody();
-                            List<Map<String,Object>> leads = lbody != null ? (List<Map<String,Object>>) lbody.get("data") : null;
+                            List<Map<String, Object>> leads = lbody != null
+                                    ? (List<Map<String, Object>>) lbody.get("data")
+                                    : null;
 
                             if (leads != null) {
-                                for (Map<String,Object> fbLead : leads) {
+                                for (Map<String, Object> fbLead : leads) {
                                     String fbLeadId = asString(fbLead.get("id"));
-                                    if (fbLeadId == null) continue;
+                                    if (fbLeadId == null)
+                                        continue;
 
-                                    Optional<Lead> existingOpt = leadRepository.findByOrganizationIdAndPlatformAndSourceLeadId(
-                                            organizationId, IntegrationPlatform.FACEBOOK, fbLeadId);
+                                    Optional<Lead> existingOpt = leadRepository
+                                            .findByOrganizationIdAndPlatformAndSourceLeadId(
+                                                    organizationId, IntegrationPlatform.FACEBOOK, fbLeadId);
 
                                     if (existingOpt.isPresent()) {
                                         Lead existing = existingOpt.get();
@@ -903,7 +957,8 @@ public class IntegrationService {
                                         result.add(existing);
                                         updatedCount++;
                                         Instant leadCreated = existing.getPlatformCreatedAt();
-                                        if (leadCreated != null && (latestFetchedLeadCreatedAt == null || leadCreated.isAfter(latestFetchedLeadCreatedAt))) {
+                                        if (leadCreated != null && (latestFetchedLeadCreatedAt == null
+                                                || leadCreated.isAfter(latestFetchedLeadCreatedAt))) {
                                             latestFetchedLeadCreatedAt = leadCreated;
                                         }
                                         continue;
@@ -913,7 +968,8 @@ public class IntegrationService {
                                     if (lastSyncedLeadCreatedAt != null
                                             && leadCreatedAt != null
                                             && !leadCreatedAt.isAfter(lastSyncedLeadCreatedAt)) {
-                                        logger.debug("Facebook lead {} daha önce senkronize edilmiş, atlanıyor.", fbLeadId);
+                                        logger.debug("Facebook lead {} daha önce senkronize edilmiş, atlanıyor.",
+                                                fbLeadId);
                                         continue;
                                     }
 
@@ -931,7 +987,8 @@ public class IntegrationService {
                                     logger.info("Created new Facebook lead {}", fbLeadId);
 
                                     Instant leadCreated = entity.getPlatformCreatedAt();
-                                    if (leadCreated != null && (latestFetchedLeadCreatedAt == null || leadCreated.isAfter(latestFetchedLeadCreatedAt))) {
+                                    if (leadCreated != null && (latestFetchedLeadCreatedAt == null
+                                            || leadCreated.isAfter(latestFetchedLeadCreatedAt))) {
                                         latestFetchedLeadCreatedAt = leadCreated;
                                     }
                                 }
@@ -950,13 +1007,15 @@ public class IntegrationService {
             runLog.setUpdated(updatedCount);
             config.setLastSyncedAt(Instant.now());
             if (latestFetchedLeadCreatedAt != null
-                    && (config.getLastLeadCreatedTime() == null || latestFetchedLeadCreatedAt.isAfter(config.getLastLeadCreatedTime()))) {
+                    && (config.getLastLeadCreatedTime() == null
+                            || latestFetchedLeadCreatedAt.isAfter(config.getLastLeadCreatedTime()))) {
                 config.setLastLeadCreatedTime(latestFetchedLeadCreatedAt);
             }
 
             updateConnectionStatus(config, IntegrationConnectionStatus.CONNECTED,
                     String.format("Facebook lead senkronizasyonu tamamlandı (yeni: %d, güncellenen: %d)",
-                            createdCount, updatedCount), null);
+                            createdCount, updatedCount),
+                    null);
 
             integrationConfigRepository.save(config);
 
@@ -978,11 +1037,11 @@ public class IntegrationService {
         return new LeadSyncResult(result.size(), createdCount, updatedCount);
     }
 
-
-
     /**
-     * Süresi dolmuş token'ları yenilemek ve aktif entegrasyonlara sahip tüm organizasyonlar için lead'leri çekmek için kullanılan yardımcı
-     * metot. Varsayılan davranışta otomatik olarak zamanlanmaz; ön yüzden gelen manuel tetiklemeler için kullanılmalıdır.
+     * Süresi dolmuş token'ları yenilemek ve aktif entegrasyonlara sahip tüm
+     * organizasyonlar için lead'leri çekmek için kullanılan yardımcı
+     * metot. Varsayılan davranışta otomatik olarak zamanlanmaz; ön yüzden gelen
+     * manuel tetiklemeler için kullanılmalıdır.
      */
     public void scheduledLeadSync() {
         logger.info("Tüm organizasyonlar için zamanlanmış lead senkronizasyonu başlatılıyor.");
@@ -991,8 +1050,10 @@ public class IntegrationService {
         for (IntegrationConfig config : configs) {
             try {
                 // Token'ın yenilenmesi gerekip gerekmediğini kontrol et
-                if (config.getExpiresAt() != null && Instant.now().isAfter(config.getExpiresAt().minus(5, ChronoUnit.MINUTES))) {
-                    logger.info("Organizasyon {} platform {} için token yenileniyor.", config.getOrganizationId(), config.getPlatform());
+                if (config.getExpiresAt() != null
+                        && Instant.now().isAfter(config.getExpiresAt().minus(5, ChronoUnit.MINUTES))) {
+                    logger.info("Organizasyon {} platform {} için token yenileniyor.", config.getOrganizationId(),
+                            config.getPlatform());
                     refreshAccessToken(config.getOrganizationId(), config.getPlatform());
                 }
 
@@ -1003,20 +1064,22 @@ public class IntegrationService {
                     fetchFacebookLeads(config.getOrganizationId());
                 }
             } catch (Exception e) {
-                logger.error("Organizasyon {} platform {} için zamanlanmış lead senkronizasyonu sırasında hata oluştu: {}",
+                logger.error(
+                        "Organizasyon {} platform {} için zamanlanmış lead senkronizasyonu sırasında hata oluştu: {}",
                         config.getOrganizationId(), config.getPlatform(), e.getMessage());
             }
         }
         logger.info("Zamanlanmış lead senkronizasyonu tamamlandı.");
     }
 
-    private void updateLeadFields(Lead lead, Map<String,Object> fbLead, String formName, String formId, String pageId) {
-        String adId    = asString(fbLead.get("ad_id"));
-        String adName  = asString(fbLead.get("ad_name"));
+    private void updateLeadFields(Lead lead, Map<String, Object> fbLead, String formName, String formId,
+            String pageId) {
+        String adId = asString(fbLead.get("ad_id"));
+        String adName = asString(fbLead.get("ad_name"));
         String adsetId = asString(fbLead.get("adset_id"));
         String adsetNm = asString(fbLead.get("adset_name"));
-        String campId  = asString(fbLead.get("campaign_id"));
-        String campNm  = asString(fbLead.get("campaign_name"));
+        String campId = asString(fbLead.get("campaign_id"));
+        String campNm = asString(fbLead.get("campaign_name"));
         Boolean organic = asBoolean(fbLead.get("is_organic"));
 
         String createdTimeStr = asString(fbLead.get("created_time"));

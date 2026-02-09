@@ -22,6 +22,9 @@ public class Hotel {
     @Column(updatable = false, nullable = false)
     private UUID id;
 
+    @Column(name = "organization_id", nullable = false)
+    private UUID organizationId;
+
     @Column(nullable = false, length = 255)
     @NotBlank(message = "Hotel name is required")
     private String name;
