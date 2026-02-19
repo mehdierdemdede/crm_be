@@ -25,4 +25,5 @@ public class IntegrationStatusResponse {
     private Instant lastErrorAt;
     private String lastErrorMessage;
     private boolean requiresAction;
+    private com.leadsyncpro.model.IntegrationConfig.SyncFrequency syncFrequency;
 }

@@ -5,6 +5,7 @@ import com.leadsyncpro.security.CustomUserDetailsService;
 import com.leadsyncpro.security.JwtAuthenticationEntryPoint;
 import com.leadsyncpro.security.JwtAuthenticationFilter;
 import com.leadsyncpro.security.JwtTokenProvider;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -36,6 +37,9 @@ import java.util.List;
 )
 public class SecurityConfig {
 
+    @Value("${app.cors.allowed-origins:http://localhost:3000}")
+    private String allowedOrigins;
+
     private final CustomUserDetailsService customUserDetailsService;
     private final JwtAuthenticationEntryPoint unauthorizedHandler;
     private final JwtTokenProvider tokenProvider;
@@ -66,8 +70,13 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(Arrays.asList("http://localhost:3000", "http://your-frontend-domain.com"));
-        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        List<String> origins = Arrays.stream(allowedOrigins.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .toList();
+        
+        configuration.setAllowedOriginPatterns(origins);
+        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"));
         configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "X-Requested-With", "Accept"));
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L);

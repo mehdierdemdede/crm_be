@@ -8,16 +8,12 @@ import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(
-        name = "integration_configs",
-        uniqueConstraints = {
-                @UniqueConstraint(columnNames = {"organization_id", "platform"})
-        },
-        indexes = {
-                @Index(name = "idx_intconfig_org_platform", columnList = "organization_id, platform"),
-                @Index(name = "idx_intconfig_last_synced", columnList = "last_synced_at")
-        }
-)
+@Table(name = "integration_configs", uniqueConstraints = {
+        @UniqueConstraint(columnNames = { "organization_id", "platform" })
+}, indexes = {
+        @Index(name = "idx_intconfig_org_platform", columnList = "organization_id, platform"),
+        @Index(name = "idx_intconfig_last_synced", columnList = "last_synced_at")
+})
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -92,6 +88,17 @@ public class IntegrationConfig {
 
     @Column(name = "last_error_message", columnDefinition = "TEXT")
     private String lastErrorMessage;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "sync_frequency", length = 20)
+    private SyncFrequency syncFrequency;
+
+    public enum SyncFrequency {
+        MANUAL,
+        HOURLY,
+        DAILY,
+        WEEKLY
+    }
 
     @PrePersist
     protected void onCreate() {

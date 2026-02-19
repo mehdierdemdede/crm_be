@@ -28,7 +28,7 @@ public class Sale {
     @Column(nullable = false)
     private UUID userId;
 
-    @Column(nullable = false)
+    @Column(nullable = true)
     private UUID organizationId;
 
     @Column(nullable = false, length = 100)
@@ -52,7 +52,7 @@ public class Sale {
     @Column(name = "document_path", length = 255)
     private String documentPath;
 
-    @Column(nullable = false)
+    @Column(nullable = true)
     private Instant operationDate;
 
     @Column(nullable = false, updatable = false)

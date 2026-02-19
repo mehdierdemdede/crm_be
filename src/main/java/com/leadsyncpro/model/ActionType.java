@@ -6,5 +6,7 @@ public enum ActionType {
     MESSENGER,
     EMAIL,
     NOTE,
-    OTHER
+    OTHER,
+    STATUS,
+    ASSIGN
 }

@@ -383,6 +383,7 @@ public class IntegrationService {
                             .lastErrorAt(config != null ? config.getLastErrorAt() : null)
                             .lastErrorMessage(config != null ? config.getLastErrorMessage() : null)
                             .requiresAction(requiresAction(status))
+                            .syncFrequency(config != null ? config.getSyncFrequency() : null)
                             .build());
                 });
         return statuses;
@@ -392,6 +393,16 @@ public class IntegrationService {
     public void deleteIntegrationConfig(UUID organizationId, IntegrationPlatform platform) {
         integrationConfigRepository.findByOrganizationIdAndPlatform(organizationId, platform)
                 .ifPresent(integrationConfigRepository::delete);
+    }
+
+    @Transactional
+    public IntegrationConfig updateSyncFrequency(UUID organizationId, IntegrationPlatform platform,
+            IntegrationConfig.SyncFrequency frequency) {
+        IntegrationConfig config = integrationConfigRepository.findByOrganizationIdAndPlatform(organizationId, platform)
+                .orElseThrow(() -> new ResourceNotFoundException("Integration not found for platform " + platform));
+
+        config.setSyncFrequency(frequency);
+        return integrationConfigRepository.save(config);
     }
 
     /**
@@ -1219,6 +1230,163 @@ public class IntegrationService {
         // Status sadece ilk kayıt sırasında NEW atanmalı, update sırasında dokunma
         if (lead.getStatus() == null) {
             lead.setStatus(LeadStatus.UNCONTACTED);
+        }
+    }
+
+    @Transactional
+    public LeadSyncResult importLeadsFromExcel(UUID organizationId,
+            java.io.InputStream inputStream,
+            Map<String, String> mapping) {
+        IntegrationLog runLog = IntegrationLog.builder()
+                .organizationId(organizationId)
+                .platform(IntegrationPlatform.EXCEL)
+                .startedAt(Instant.now())
+                .build();
+
+        int createdCount = 0;
+        int failedCount = 0;
+        int totalRows = 0;
+
+        try (org.apache.poi.ss.usermodel.Workbook workbook = org.apache.poi.ss.usermodel.WorkbookFactory
+                .create(inputStream)) {
+            org.apache.poi.ss.usermodel.Sheet sheet = workbook.getSheetAt(0); // Assume first sheet
+
+            // Header Row (0-based)
+            org.apache.poi.ss.usermodel.Row headerRow = sheet.getRow(0);
+            if (headerRow == null) {
+                throw new IllegalArgumentException("Excel dosyası boş veya başlık satırı yok.");
+            }
+
+            Map<String, Integer> headerIndexMap = new HashMap<>();
+            for (org.apache.poi.ss.usermodel.Cell cell : headerRow) {
+                if (cell != null) {
+                    headerIndexMap.put(cell.getStringCellValue().trim(), cell.getColumnIndex());
+                }
+            }
+
+            for (int i = 1; i <= sheet.getLastRowNum(); i++) {
+                org.apache.poi.ss.usermodel.Row row = sheet.getRow(i);
+                if (row == null)
+                    continue;
+                totalRows++;
+
+                try {
+                    Lead lead = new Lead();
+                    lead.setOrganizationId(organizationId);
+                    lead.setPlatform(IntegrationPlatform.EXCEL);
+                    lead.setStatus(LeadStatus.UNCONTACTED);
+                    lead.setCreatedAt(Instant.now());
+
+                    // Default Source Lead ID to something unique
+                    lead.setSourceLeadId("EXCEL-" + UUID.randomUUID());
+
+                    Map<String, String> extraFields = new HashMap<>();
+
+                    for (Map.Entry<String, String> entry : mapping.entrySet()) {
+                        String excelHeader = entry.getKey();
+                        String crmField = entry.getValue();
+
+                        Integer colIndex = headerIndexMap.get(excelHeader);
+                        if (colIndex == null)
+                            continue;
+
+                        org.apache.poi.ss.usermodel.Cell cell = row.getCell(colIndex);
+                        String cellValue = getCellValueAsString(cell);
+
+                        if (isBlank(cellValue))
+                            continue;
+
+                        switch (crmField) {
+                            case "name":
+                                lead.setName(cellValue);
+                                break;
+                            case "email":
+                                lead.setEmail(cellValue);
+                                break;
+                            case "phone":
+                                lead.setPhone(cellValue);
+                                break;
+                            case "campaign":
+                                lead.setCampaignName(cellValue);
+                                break;
+                            default:
+                                extraFields.put(crmField, cellValue);
+                        }
+                    }
+
+                    // Fallback for name if missing
+                    if (isBlank(lead.getName())) {
+                        lead.setName("İsimsiz Lead (Excel)");
+                    }
+
+                    if (!extraFields.isEmpty()) {
+                        lead.setExtraFieldsJson(objectMapper.writeValueAsString(extraFields));
+                    }
+
+                    // Simple deduplication logic: check by email or phone if present
+                    boolean exists = false;
+                    if (!isBlank(lead.getEmail())) {
+                        exists = leadRepository.existsByOrganizationIdAndEmail(organizationId, lead.getEmail());
+                    }
+                    if (!exists && !isBlank(lead.getPhone())) {
+                        exists = leadRepository.existsByOrganizationIdAndPhone(organizationId, lead.getPhone());
+                    }
+
+                    if (!exists) {
+                        leadRepository.save(lead);
+                        createdCount++;
+                        // Auto Assign Logic
+                        if (lead.getStatus() == LeadStatus.UNCONTACTED) {
+                            autoAssignService.assignLeadAutomatically(lead);
+                        }
+                    } else {
+                        // Skip or update? For now skipping duplicates to avoid spam
+                        // Alternatively could log as 'updated' if logic implemented
+                    }
+
+                } catch (Exception e) {
+                    failedCount++;
+                    logger.error("Row {} import failed: {}", i, e.getMessage());
+                }
+            }
+
+            runLog.setTotalFetched(totalRows);
+            runLog.setNewCreated(createdCount);
+            runLog.setFinishedAt(Instant.now());
+            integrationLogRepository.save(runLog);
+
+            return new LeadSyncResult(totalRows, createdCount, 0);
+
+        } catch (Exception e) {
+            runLog.setErrorMessage("Excel okuma hatası: " + e.getMessage());
+            runLog.setFinishedAt(Instant.now());
+            integrationLogRepository.save(runLog);
+            throw new RuntimeException("Excel işlenirken hata oluştu: " + e.getMessage(), e);
+        }
+    }
+
+    private String getCellValueAsString(org.apache.poi.ss.usermodel.Cell cell) {
+        if (cell == null)
+            return "";
+        switch (cell.getCellType()) {
+            case STRING:
+                return cell.getStringCellValue();
+            case NUMERIC:
+                if (org.apache.poi.ss.usermodel.DateUtil.isCellDateFormatted(cell)) {
+                    return cell.getLocalDateTimeCellValue().toString();
+                }
+                // Check if it's an integer to avoid .0 suffix
+                double val = cell.getNumericCellValue();
+                if (val == Math.floor(val) && !Double.isInfinite(val)) {
+                    return String.valueOf((long) val);
+                }
+                return String.valueOf(val);
+            case BOOLEAN:
+                return String.valueOf(cell.getBooleanCellValue());
+            case FORMULA:
+                return cell.getCellFormula();
+            default:
+                return "";
         }
     }
 

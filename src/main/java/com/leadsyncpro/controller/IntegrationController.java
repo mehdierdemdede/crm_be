@@ -96,6 +96,22 @@ public class IntegrationController {
         return ResponseEntity.ok(statuses);
     }
 
+    @PutMapping("/{platform}/sync-frequency")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'SUPER_ADMIN')")
+    public ResponseEntity<IntegrationConfig> updateSyncFrequency(
+            @PathVariable("platform") String platform,
+            @RequestParam("frequency") IntegrationConfig.SyncFrequency frequency,
+            @AuthenticationPrincipal UserPrincipal currentUser,
+            @RequestParam(value = "organizationId", required = false) UUID organizationIdParam) {
+
+        UUID organizationId = resolveOrganizationId(currentUser, organizationIdParam);
+        IntegrationPlatform integrationPlatform = resolvePlatform(platform);
+
+        IntegrationConfig updatedConfig = integrationService.updateSyncFrequency(organizationId, integrationPlatform,
+                frequency);
+        return ResponseEntity.ok(updatedConfig);
+    }
+
     @PostMapping("/fetch-leads/{platform}")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'SUPER_ADMIN')")
     public ResponseEntity<LeadSyncResult> fetchLeadsManually(@PathVariable("platform") String platform,
@@ -111,6 +127,29 @@ public class IntegrationController {
                     "Manual lead fetch is not supported for platform: " + platform);
         };
         return ResponseEntity.ok(result);
+    }
+
+    @PostMapping(value = "/excel/import", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'SUPER_ADMIN')")
+    public ResponseEntity<LeadSyncResult> importExcel(
+            @AuthenticationPrincipal UserPrincipal currentUser,
+            @RequestParam("file") org.springframework.web.multipart.MultipartFile file,
+            @RequestParam("mapping") String mappingJson) {
+
+        UUID organizationId = currentUser.getOrganizationId();
+        if (organizationId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Organization ID missing");
+        }
+
+        try {
+            java.util.Map<String, String> mapping = new com.fasterxml.jackson.databind.ObjectMapper()
+                    .readValue(mappingJson, java.util.Map.class);
+            LeadSyncResult result = integrationService.importLeadsFromExcel(organizationId, file.getInputStream(),
+                    mapping);
+            return ResponseEntity.ok(result);
+        } catch (java.io.IOException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid mapping or file", e);
+        }
     }
 
     private UUID resolveOrganizationId(UserPrincipal currentUser, UUID requestedOrganizationId) {

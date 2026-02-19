@@ -100,11 +100,17 @@ public class SalesService {
                 .toList();
     }
 
-    public java.util.List<SaleResponse> getSalesByDateRange(UUID organizationId, Instant startDate, Instant endDate) {
-        return salesRepository
-                .findAllByOrganizationIdAndOperationDateBetweenOrderByOperationDateAsc(organizationId, startDate,
-                        endDate)
-                .stream()
+    public java.util.List<SaleResponse> getSalesByDateRange(UUID organizationId, UUID userId, Instant startDate,
+            Instant endDate) {
+        java.util.List<Sale> sales;
+        if (userId != null) {
+            sales = salesRepository.findAllByUserIdAndOrganizationIdAndOperationDateBetweenOrderByOperationDateAsc(
+                    userId, organizationId, startDate, endDate);
+        } else {
+            sales = salesRepository.findAllByOrganizationIdAndOperationDateBetweenOrderByOperationDateAsc(
+                    organizationId, startDate, endDate);
+        }
+        return sales.stream()
                 .map(this::mapToSaleResponse)
                 .toList();
     }
@@ -142,6 +148,7 @@ public class SalesService {
         return SaleResponse.builder()
                 .id(sale.getId())
                 .leadId(sale.getLead() != null ? sale.getLead().getId() : null)
+                .leadName(sale.getLead() != null ? sale.getLead().getName() : null)
                 .operationType(sale.getOperationType())
                 .price(sale.getPrice())
                 .currency(sale.getCurrency())

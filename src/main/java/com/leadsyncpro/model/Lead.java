@@ -8,17 +8,14 @@ import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(
-        name = "leads",
-        indexes = {
-                // 🔹 Entegrasyon duplicate kontrolü (Facebook/Google)
-                @Index(name = "idx_leads_org_platform_sourceid", columnList = "organization_id, platform, source_lead_id"),
-                // 🔹 Organizasyon + status sorguları (dashboard / filtre)
-                @Index(name = "idx_leads_org_status", columnList = "organization_id, status"),
-                // 🔹 Kullanıcı bazlı lead listesi (assign ve kullanıcı dashboard)
-                @Index(name = "idx_leads_assigned_user", columnList = "assigned_to_user_id")
-        }
-)
+@Table(name = "leads", indexes = {
+        // 🔹 Entegrasyon duplicate kontrolü (Facebook/Google)
+        @Index(name = "idx_leads_org_platform_sourceid", columnList = "organization_id, platform, source_lead_id"),
+        // 🔹 Organizasyon + status sorguları (dashboard / filtre)
+        @Index(name = "idx_leads_org_status", columnList = "organization_id, status"),
+        // 🔹 Kullanıcı bazlı lead listesi (assign ve kullanıcı dashboard)
+        @Index(name = "idx_leads_assigned_user", columnList = "assigned_to_user_id")
+})
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -54,24 +51,26 @@ public class Lead {
 
     // 🔹 İlişkilendirilmiş kampanya (nullable olabilir)
 
-    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
+    @JsonIgnoreProperties({ "hibernateLazyInitializer", "handler" })
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "campaign_id")
     private Campaign campaign;
+
+    @Column(name = "campaign_name", length = 255)
+    private String campaignName;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 50)
     private LeadStatus status;
 
     // 🔹 Lead hangi kullanıcıya atanmış
-    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
+    @JsonIgnoreProperties({ "hibernateLazyInitializer", "handler" })
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "assigned_to_user_id")
     private User assignedToUser;
 
     @Column(name = "external_id", length = 100)
     private String externalId;
-
 
     @Column(name = "created_at", updatable = false)
     private Instant createdAt;

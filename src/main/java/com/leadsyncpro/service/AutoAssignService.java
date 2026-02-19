@@ -74,8 +74,7 @@ public class AutoAssignService {
                     dailyCap,
                     assignedToday,
                     remaining,
-                    lastAssigned
-            ));
+                    lastAssigned));
         }
 
         return stats.stream()
@@ -128,13 +127,12 @@ public class AutoAssignService {
         Instant startOfDay = LocalDate.now(ZoneOffset.UTC).atStartOfDay().toInstant(ZoneOffset.UTC);
         Instant endOfDay = startOfDay.plusSeconds(86400);
 
-        // 🔹 Günlük atama sayılarını hesapla
-        Map<UUID, Long> todayAssignments = new HashMap<>();
-        for (User u : eligibleUsers) {
-            long count = leadRepository.countByAssignedToUser_IdAndCreatedAtBetween(
-                    u.getId(), startOfDay, endOfDay);
-            todayAssignments.put(u.getId(), count);
-        }
+        // 🔹 Günlük atama sayılarını hesapla (Optimize edildi)
+        List<Object[]> assignmentsData = leadRepository.countTodayAssignmentsByUsers(orgId, startOfDay);
+        Map<UUID, Long> todayAssignments = assignmentsData.stream()
+                .collect(Collectors.toMap(
+                        row -> (UUID) row[0],
+                        row -> ((Number) row[1]).longValue()));
 
         // 🔹 Kapasitesi dolmamış kullanıcıları filtrele
         List<User> availableUsers = eligibleUsers.stream()
@@ -178,8 +176,7 @@ public class AutoAssignService {
                     lead.getCampaign() != null ? lead.getCampaign().getName() : null,
                     lead.getLanguage(),
                     lead.getStatus() != null ? lead.getStatus().name() : "NEW",
-                    lead.getId() != null ? lead.getId().toString() : null
-            );
+                    lead.getId() != null ? lead.getId().toString() : null);
         } catch (Exception e) {
             logger.warn("Mail gönderilemedi: {}", e.getMessage());
         }

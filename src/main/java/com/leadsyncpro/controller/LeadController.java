@@ -130,9 +130,9 @@ public class LeadController {
             @Valid @RequestBody LeadActionRequest req,
             @AuthenticationPrincipal UserPrincipal currentUser) {
         LeadActionResponse created = leadActionService.createActionForLead(
-                leadId, currentUser.getOrganizationId(), currentUser.getId(), req);
-        return ResponseEntity.status(HttpStatus.CREATED).body(created);
-    }
+            leadId, currentUser.getOrganizationId(), currentUser.getId(), req);
+    return ResponseEntity.status(HttpStatus.CREATED).body(created);
+}
 
     @GetMapping("/{leadId}/actions")
     @PreAuthorize("hasAnyAuthority('USER','ADMIN','SUPER_ADMIN')")

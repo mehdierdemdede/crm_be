@@ -7,21 +7,19 @@ import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(
-        name = "campaigns",
-        uniqueConstraints = {
-                @UniqueConstraint(columnNames = {"organization_id", "name"})
-        },
-        indexes = {
-                @Index(name = "idx_campaign_org_name", columnList = "organization_id, name"),
-                @Index(name = "idx_campaign_created", columnList = "created_at")
-        }
-)
+@Table(name = "campaigns", uniqueConstraints = {
+        @UniqueConstraint(columnNames = { "organization_id", "name" })
+}, indexes = {
+        @Index(name = "idx_campaign_org_name", columnList = "organization_id, name"),
+        @Index(name = "idx_campaign_created", columnList = "created_at")
+})
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class Campaign {
+public class Campaign implements java.io.Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     @Id
     @GeneratedValue(generator = "UUID")

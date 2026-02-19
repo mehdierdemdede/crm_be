@@ -14,6 +14,7 @@ import java.util.UUID;
 public class SaleResponse {
     private UUID id;
     private UUID leadId;
+    private String leadName;
     private String operationType;
     private Double price;
     private String currency;

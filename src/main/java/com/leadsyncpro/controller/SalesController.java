@@ -26,6 +26,7 @@ public class SalesController {
     public ResponseEntity<?> getAllSales(
             @AuthenticationPrincipal UserPrincipal currentUser,
             @RequestParam(required = false) UUID leadId,
+            @RequestParam(required = false) UUID userId,
             @RequestParam(required = false) String startDate,
             @RequestParam(required = false) String endDate,
             org.springframework.data.domain.Pageable pageable) {
@@ -37,7 +38,21 @@ public class SalesController {
         if (startDate != null && endDate != null) {
             java.time.Instant start = java.time.Instant.parse(startDate);
             java.time.Instant end = java.time.Instant.parse(endDate);
-            return ResponseEntity.ok(salesService.getSalesByDateRange(currentUser.getOrganizationId(), start, end));
+
+            // Allow filtering by specific user if provided, otherwise show all (if
+            // permitted)
+            // If current user is restricted (e.g. USER role), they might only see their own
+            // sales.
+            // For now, we trust the service to handle data scoping via organizationId.
+            // But strict RBAC would enforce userId = currentUser.getId() for regular users.
+            UUID targetUserId = userId;
+
+            // Simple check: if not admin/super_admin, maybe force own id?
+            // Assuming for now that we want to View Member Details, so we pass that
+            // member's ID.
+
+            return ResponseEntity
+                    .ok(salesService.getSalesByDateRange(currentUser.getOrganizationId(), targetUserId, start, end));
         }
 
         return ResponseEntity.ok(salesService.getAllSales(currentUser.getOrganizationId(), pageable));

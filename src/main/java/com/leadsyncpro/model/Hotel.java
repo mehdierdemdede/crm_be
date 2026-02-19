@@ -22,7 +22,7 @@ public class Hotel {
     @Column(updatable = false, nullable = false)
     private UUID id;
 
-    @Column(name = "organization_id", nullable = false)
+    @Column(name = "organization_id", nullable = true)
     private UUID organizationId;
 
     @Column(nullable = false, length = 255)
