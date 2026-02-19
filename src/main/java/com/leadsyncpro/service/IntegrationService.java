@@ -435,6 +435,7 @@ public class IntegrationService {
                     "public_profile",
                     "pages_show_list",
                     "pages_read_engagement",
+                    "pages_manage_ads",
                     "leads_retrieval");
         } else {
             throw new IllegalArgumentException("Desteklenmeyen platform: " + platform);
